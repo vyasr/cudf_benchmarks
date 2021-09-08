@@ -1,15 +1,19 @@
-import utils
 import pytest
 
+import utils
+
 
 @pytest.mark.parametrize(
-    'ncols', [4, 7, 10],
+    "ncols",
+    [4, 7, 10],
 )
 @pytest.mark.parametrize(
-    'nkey_cols', [2, 3, 4],
+    "nkey_cols",
+    [2, 3, 4],
 )
 @pytest.mark.parametrize(
-    'nrows', [100, 10_000, 1_000_000],
+    "nrows",
+    [100, 10_000, 1_000_000],
 )
 def test_merge(benchmark, ncols, nkey_cols, nrows):
     lhs = utils.make_frame(ncols, nkey_cols, nrows)
