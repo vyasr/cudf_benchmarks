@@ -111,5 +111,5 @@ import pytest
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_concat_axis_1(benchmark, objs, axis, join, ignore_index):
     benchmark(
-        lambda: cudf.concat(objs=objs, axis=axis, join=join, ignore_index=ignore_index)
+        cudf.concat, objs=objs, axis=axis, join=join, ignore_index=ignore_index
     )
