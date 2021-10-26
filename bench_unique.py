@@ -3,20 +3,20 @@ import cupy as cp
 import cudf
 import pytest
 
-from utils import make_frame
+from utils import make_frame, make_col
 
 n = [100, 10000]
 
 @pytest.fixture(params=n)
 def col(request):
-    return make_frame(ncols=1, nkey_cols=0, nrows=request.param, low=0, high=10)['val0']._column
+    return make_col(request.param)
 
 @pytest.fixture(params=n)
 def df(request):
     return make_frame(ncols=5, nkey_cols=0, nrows=request.param)
 
 def test_unique_single_column(benchmark, col):
-    benchmark(lambda: col.unique())
+    benchmark(col.unique)
 
-def test_drop_duplicate_multiple_column(benchmark, df):
-    benchmark(lambda: df.drop_duplicates())
+def test_drop_duplicate_df(benchmark, df):
+    benchmark(df.drop_duplicates)
