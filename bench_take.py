@@ -3,13 +3,13 @@ import cupy as cp
 import cudf
 import pytest
 
-from utils import make_frame
+from utils import make_frame, make_col
 
 n = [100, 10000]
 
 @pytest.fixture(params=n)
 def col(request):
-    return make_frame(ncols=1, nkey_cols=0, nrows=request.param)['val0']._column
+    return make_col(request.param)
 
 @pytest.fixture(params=n)
 def df(request):
@@ -31,7 +31,7 @@ def make_gather_map(len_gather_map, len_column, how):
 )
 def test_gather_single_column(benchmark, col, gather_how, nullify):
     gather_map = make_gather_map(int(col.size * 0.4), col.size, gather_how)
-    benchmark(lambda: col.take(gather_map, nullify))
+    benchmark(col.take, gather_map, nullify=nullify)
 
 @pytest.mark.parametrize(
     "keep_index", [True, False]
@@ -41,4 +41,4 @@ def test_gather_single_column(benchmark, col, gather_how, nullify):
 )
 def test_take_multiple_column(benchmark, df, gather_how, keep_index):
     gather_map = make_gather_map(int(len(df) * 0.4), len(df), gather_how)
-    benchmark(lambda: df.take(gather_map, keep_index=keep_index))
+    benchmark(df.take, gather_map, keep_index=keep_index)
