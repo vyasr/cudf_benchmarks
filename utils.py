@@ -13,3 +13,8 @@ def make_frame(ncols, nkey_cols, nrows, low=0, high=100):
         for i in range(nval_cols)
     }
     return cudf.DataFrame({**key_columns, **val_columns})
+
+def make_col(nrows):
+    c = cudf.core.column.as_column(cp.random.randn(nrows))
+    c[::2] = None
+    return c
