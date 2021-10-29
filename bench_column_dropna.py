@@ -9,7 +9,7 @@ n = [100, 10000]
 
 @pytest.fixture(params=n)
 def col(request):
-    return make_col(request.param)
+    return make_col(request.param, has_nulls=True)
 
 @pytest.mark.parametrize(
     "dropnan", [True, False]
