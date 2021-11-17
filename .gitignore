@@ -1,0 +1,4 @@
+.benchmarks
+reports
+*.qdrep
+*.pyc
