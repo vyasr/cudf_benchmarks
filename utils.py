@@ -1,3 +1,5 @@
+from numbers import Real
+
 import cudf
 import cupy as cp
 
@@ -21,14 +23,19 @@ def make_col(nrows, has_nulls=True):
     return c
 
 
-def make_gather_map(len_gather_map, len_column, how):
+def make_gather_map(len_gather_map: Real, len_column: Real, how: str):
     """Create a gather map based on "how" you'd like to gather from input.
     - sequence: gather the first `len_gather_map` rows, the first thread
                 collects the first element
     - reverse:  gather the last `len_gather_map` rows, the first thread
                 collects the last element
     - random:   create a pseudorandom gather map
+
+    `len_gather_map`, `len_column` gets rounded to integer.
     """
+    len_gather_map = round(len_gather_map)
+    len_column = round(len_column)
+
     rstate = cp.random.RandomState(seed=0)
     if how == "sequence":
         return cudf.Series(cp.arange(0, len_gather_map))._column
