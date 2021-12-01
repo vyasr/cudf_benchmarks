@@ -17,6 +17,7 @@ def make_frame(ncols, nkey_cols, nrows, low=0, high=100):
 def make_col(nrows, has_nulls=True):
     c = cudf.core.column.as_column(cp.random.randn(nrows))
     if has_nulls:
+        # The choice of null placement is arbitrary.
         c[::2] = None
     return c
 
