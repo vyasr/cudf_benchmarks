@@ -45,3 +45,8 @@ def make_gather_map(len_gather_map: Real, len_column: Real, how: str):
         )._column
     elif how == "random":
         return cudf.Series(rstate.randint(0, len_column, len_gather_map))._column
+
+
+def make_boolean_mask_column(size):
+    rstate = cp.random.RandomState(seed=0)
+    return cudf.core.column.as_column(rstate.randint(0, 2, size).astype(bool))
