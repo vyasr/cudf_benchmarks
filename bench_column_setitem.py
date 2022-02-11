@@ -1,52 +1,64 @@
 import cudf
 import pytest
-from pytest import param
-
-# size = 1000000
-size = 10000
 
 
-def make_value(col_size, key_size, mode):
+@pytest.fixture(params=[10000, 1000000])
+def size(request):
+    return request.param
+
+
+@pytest.fixture
+def col(size):
+    return cudf.core.column.arange(size)
+
+
+@pytest.fixture(
+    params=["stride-1-slice", "stride-2-slice", "boolean_mask", "int_column"]
+)
+def key(request, col):
+    size = len(col)
+    if request.param == "stride-1-slice":
+        return slice(None, None, 1)
+    elif request.param == "stride-2-slice":
+        return slice(None, None, 2)
+    elif request.param == "boolean_mask":
+        return [True, False] * (size // 2)
+    elif request.param == "int_column":
+        return list(range(size))
+
+
+@pytest.fixture(params=["scalar", "align_to_key_size", "align_to_col_size"])
+def value(request, col, key):
+    mode = request.param
     if mode == "scalar":
         return 42
     if mode == "align_to_col_size":
-        return [42] * col_size
+        if isinstance(key, list):
+            return [42] * len(col)
+        else:
+            pytest.skip(
+                "Scattering to slice of column requires value size same as key"
+                "size. In stride-1 case, it's benchmarked by `align_to_key_size`."
+            )
     if mode == "align_to_key_size":
+        if isinstance(key, list) and isinstance(key[0], int):
+            pytest.skip(
+                "Integer scatter map is the same length of column, "
+                "which was already benchmarked by `align_to_col_size`."
+            )
+        key_size = len(col[key])
         return [42] * key_size
 
 
 # Benchmark Grid
-# key:  slice == 1 (fill or copy_range shortcut),
-#       slice != 1 (scatter),
-#       column(bool) (boolean_mask_scatter),
+# key:  slice == 1  (fill or copy_range shortcut),
+#       slice != 1  (scatter),
+#       column(bool)    (boolean_mask_scatter),
 #       column(int) (scatter)
 # value:    scalar,
 #           column (len(val)==len(key)),
 #           column (len(val)!=len(key) & len==num_trues)
-@pytest.mark.parametrize(
-    "key, value_mode",
-    [
-        param(slice(None, None, 1), "scalar", id="stride-1_slice_scalar"),
-        param(slice(None, None, 1), "align_to_key_size", id="stride-1_slice_col"),
-        param(slice(None, None, 2), "scalar", id="stride-2_slice_scalar"),
-        param(slice(None, None, 2), "align_to_key_size", id="stride-2_slice_col"),
-        param([True, False] * (size // 2), "scalar", id="boolean_mask_scalar"),
-        param(
-            [True, False] * (size // 2),
-            "align_to_key_size",
-            id="boolean_mask_col_unaligned",
-        ),
-        param(
-            [True, False] * (size // 2),
-            "align_to_col_size",
-            id="boolean_mask_col_aligned",
-        ),
-        param(list(range(0, size)), "scalar", id="integer_scatter_map_scalar"),
-        param(list(range(0, size)), "align_to_col_size", id="integer_scatter_map_col"),
-    ],
-)
-def test_column_setitem(benchmark, key, value_mode):
-    col = cudf.Series([1] * size)._column
-    key_size = len(col[key])
-    value = make_value(len(col), key_size, value_mode)
+
+
+def test_column_setitem(benchmark, col, key, value):
     benchmark(col.__setitem__, key, value)
