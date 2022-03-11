@@ -5,11 +5,6 @@ import pytest
 from utils import make_frame
 
 
-@pytest.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])
-def axis(request):
-    return request.param
-
-
 @pytest.fixture(params=[10000, 100000000], ids=["size10K", "size100M"])
 def df(request):
     size = request.param
