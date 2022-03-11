@@ -12,42 +12,41 @@ def col(size):
     return cudf.core.column.arange(size)
 
 
-@pytest.fixture(
-    params=["stride-1-slice", "stride-2-slice", "boolean_mask", "int_column"]
-)
-def key(request, col):
+def make_key(mode, col):
     size = len(col)
-    if request.param == "stride-1-slice":
+    if mode == "stride-1-slice":
         return slice(None, None, 1)
-    elif request.param == "stride-2-slice":
+    elif mode == "stride-2-slice":
         return slice(None, None, 2)
-    elif request.param == "boolean_mask":
+    elif mode == "boolean_mask":
         return [True, False] * (size // 2)
-    elif request.param == "int_column":
+    elif mode == "int_column":
         return list(range(size))
 
 
-@pytest.fixture(params=["scalar", "align_to_key_size", "align_to_col_size"])
-def value(request, col, key):
-    mode = request.param
-    if mode == "scalar":
-        return 42
-    if mode == "align_to_col_size":
-        if isinstance(key, list):
-            return [42] * len(col)
-        else:
-            pytest.skip(
-                "Scattering to slice of column requires value size same as key"
-                "size. In stride-1 case, it's benchmarked by `align_to_key_size`."
-            )
-    if mode == "align_to_key_size":
-        if isinstance(key, list) and isinstance(key[0], int):
-            pytest.skip(
-                "Integer scatter map is the same length of column, "
-                "which was already benchmarked by `align_to_col_size`."
-            )
-        key_size = len(col[key])
-        return [42] * key_size
+@pytest.fixture(
+    params=[
+        ("stride-1-slice", "scalar"),
+        ("stride-2-slice", "scalar"),
+        ("boolean_mask", "scalar"),
+        ("int_column", "scalar"),
+        ("stride-1-slice", "align_to_key_size"),
+        ("stride-2-slice", "align_to_key_size"),
+        ("boolean_mask", "align_to_col_size"),
+        ("int_column", "align_to_col_size"),
+    ],
+    ids=lambda p: f"{p[0]}-{p[1]}",
+)
+def key_value(request, col):
+    key_mode, value_mode = request.param
+    if value_mode == "scalar":
+        return make_key(key_mode, col), 42
+    if value_mode == "align_to_col_size":
+        return make_key(key_mode, col), [42] * len(col)
+    if value_mode == "align_to_key_size":
+        key = make_key(key_mode, col)
+        materilized_key_size = len(col[key])
+        return key, [42] * materilized_key_size
 
 
 # Benchmark Grid
@@ -60,5 +59,6 @@ def value(request, col, key):
 #           column (len(val)!=len(key) & len==num_trues)
 
 
-def test_column_setitem(benchmark, col, key, value):
+def test_column_setitem(benchmark, col, key_value):
+    key, value = key_value
     benchmark(col.__setitem__, key, value)
