@@ -5,6 +5,11 @@ import pytest
 from utils import make_frame
 
 
+@pytest.fixture(params=[0.5])
+def frac(request):
+    return request.param
+
+
 @pytest.fixture(params=[10000, 100000000], ids=["size10K", "size100M"])
 def df(request):
     size = request.param
@@ -22,8 +27,7 @@ def random_state(request):
     return rs(seed=42)
 
 
-def test_sample_df(benchmark, df, axis, random_state):
+def test_sample_df(benchmark, df, axis, frac, random_state):
     if axis == 1 and isinstance(random_state, cp.random.RandomState):
         pytest.skip("Unsupported params.")
-    frac = 0.5
     benchmark(df.sample, frac=frac, axis=axis, random_state=random_state)
