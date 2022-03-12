@@ -21,3 +21,8 @@ def df(request):
     The two parameters are `nrows`
     """
     return make_frame(ncols=5, nkey_cols=0, nrows=request.param)
+
+
+@pytest.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])
+def axis(request):
+    return request.param
