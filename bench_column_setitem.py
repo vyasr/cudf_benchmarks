@@ -45,8 +45,8 @@ def key_value(request, col):
         return make_key(key_mode, col), [42] * len(col)
     if value_mode == "align_to_key_size":
         key = make_key(key_mode, col)
-        materilized_key_size = len(col[key])
-        return key, [42] * materilized_key_size
+        materialized_key_size = len(col[key])
+        return key, [42] * materialized_key_size
 
 
 # Benchmark Grid
@@ -55,10 +55,9 @@ def key_value(request, col):
 #       column(bool)    (boolean_mask_scatter),
 #       column(int) (scatter)
 # value:    scalar,
-#           column (len(val)==len(key)),
-#           column (len(val)!=len(key) & len==num_trues)
+#           column (len(val) == len(key)),
+#           column (len(val) != len(key) & len == num_true)
 
 
 def test_column_setitem(benchmark, col, key_value):
-    key, value = key_value
-    benchmark(col.__setitem__, key, value)
+    benchmark(col.__setitem__, *key_value)
