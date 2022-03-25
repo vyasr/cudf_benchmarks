@@ -1,7 +1,6 @@
 import operator
 
-import cudf
-import cupy as cp
+from config import cudf, cupy as cp
 import pytest
 
 

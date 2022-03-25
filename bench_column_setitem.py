@@ -1,4 +1,4 @@
-import cudf
+from config import cudf
 import pytest
 
 

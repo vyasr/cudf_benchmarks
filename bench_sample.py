@@ -1,4 +1,4 @@
-import cupy as cp
+from config import cupy as cp
 import numpy as np
 import pytest
 

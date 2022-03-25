@@ -1,6 +1,6 @@
 import pytest
 
-import cudf
+from config import cudf
 
 from utils import make_frame
 

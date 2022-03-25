@@ -1,7 +1,6 @@
 from numbers import Real
 
-import cudf
-import cupy as cp
+from config import cudf, cupy as cp
 
 
 def make_frame(ncols, nkey_cols, nrows, low=0, high=100):

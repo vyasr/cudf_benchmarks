@@ -1,6 +1,5 @@
-import cudf
+from config import cudf, cupy as cp
 import numpy as np
-import cupy as cp
 import pytest
 
 
