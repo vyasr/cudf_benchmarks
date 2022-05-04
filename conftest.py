@@ -1,6 +1,7 @@
 from itertools import product
 
 import pytest
+from cudf.core.index import RangeIndex
 
 from utils import make_col, make_frame
 
@@ -26,3 +27,9 @@ def df(request):
 @pytest.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])
 def axis(request):
     return request.param
+
+
+@pytest.fixture(params=[1_000, 100_000, 10_000_000])
+def rangeindex(request):
+    """Create a cudf RangeIndex of different size `nrows`"""
+    return RangeIndex(range(request.param))
