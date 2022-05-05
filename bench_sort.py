@@ -50,3 +50,7 @@ def test_dataframe_sort_values(benchmark, N, ncol, ncol_sort):
 def test_dataframe_nsmallest(benchmark, N, ncol, ncol_sort, n):
     df = cudf.DataFrame({i: cp.random.rand(N) for i in range(ncol)})
     benchmark(df.nsmallest, n, [i for i in range(ncol_sort)])
+
+
+def test_rangeindex_argsort(benchmark, rangeindex):
+    benchmark(rangeindex.argsort)
