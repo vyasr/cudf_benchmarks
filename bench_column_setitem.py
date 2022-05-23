@@ -45,7 +45,13 @@ def key_value(request, col):
         return make_key(key_mode, col), [42] * len(col)
     if value_mode == "align_to_key_size":
         key = make_key(key_mode, col)
-        materialized_key_size = len(col[key])
+        if "slice" in key_mode:
+            start, stop, stride = key.indices(len(col))
+            materialized_key_size = len(col.slice(start, stop, stride))
+        elif key_mode == "boolean_mask":
+            materialized_key_size = len(col.apply_boolean_mask(key))
+        elif key_mode == "int_column":
+            materialized_key_size = len(col.take(key))
         return key, [42] * materialized_key_size
 
 

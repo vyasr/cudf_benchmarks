@@ -12,6 +12,8 @@ import pytest
 @pytest.mark.parametrize("N", [1_000, 100_000, 10_000_000])
 @pytest.mark.parametrize("has_nulls", [False, True])
 def test_binops(benchmark, op, cls, N, has_nulls):
+    if op == operator.eq and cls is cudf.Index and has_nulls:
+        pytest.skip("The equals operator does not support nulls for Index.")
     # Need int array for __and__
     ser = cudf.Series(cp.random.rand(N), dtype=int)
     if has_nulls:
