@@ -1,9 +1,13 @@
+import os
+import sys
 from itertools import product
 
-import pytest
-from config import cudf
+sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
-from utils import make_col, make_frame
+import pytest
+
+from common.config import cudf
+from common.utils import make_col, make_frame
 
 
 @pytest.fixture(params=product([100, 10000], [True, False]))
@@ -33,3 +37,12 @@ def axis(request):
 def rangeindex(request):
     """Create a cudf RangeIndex of different size `nrows`"""
     return cudf.RangeIndex(range(request.param))
+
+
+def pytest_sessionstart(session):
+    sys.path.insert(0, os.path.join(os.getcwd(), "common"))
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if "common" in sys.path[0]:
+        del sys.path[0]
