@@ -1,3 +1,5 @@
+"""Benchmarks of IndexedFrame methods."""
+
 import pytest
 
 
