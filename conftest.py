@@ -58,7 +58,7 @@ num_rows = [100, 10_000]
 num_cols = [1, 5]
 
 
-# Core Series fixtures
+# Core fixtures generated for each common type of object.
 @pytest_cases.fixture(params=num_rows)
 def series_nulls_false(request):
     return cudf.Series(cupy.arange(request.param))
@@ -71,13 +71,10 @@ def series_nulls_true(request):
     return s
 
 
-fixture_union(
-    name="series",
-    fixtures=(["series_nulls_false", "series_nulls_true"]),
-)
-
-
-# Core DataFrame fixtures
+# Since we may in some cases want to benchmark just single-columned DataFrame
+# objects, we generate separate fixtures for each num_rows/num_cols pair so
+# that we can recombine all the num_cols==1 fixtures into one union rather than
+# using a parametrized fixture as we do for the series case above.
 def make_dataframe(nr, nc):
     return cudf.DataFrame({f"{i}": cupy.arange(nr) for i in range(nc)})
 
@@ -99,6 +96,24 @@ for nr in num_rows:
         globals()[name] = pytest.fixture(name=name)(
             lambda nr=nr, nc=nc: make_nullable_dataframe(nr, nc)
         )
+
+
+@pytest_cases.fixture(params=num_rows)
+def range_index(request):
+    return cudf.RangeIndex(request.param)
+
+
+@pytest_cases.fixture(params=num_rows)
+def int64_index(request):
+    return cudf.Index(cupy.arange(request.param), dtype="int64")
+
+
+# Various common important fixture unions
+fixture_union(
+    name="series",
+    fixtures=(["series_nulls_false", "series_nulls_true"]),
+)
+
 
 fixture_union(
     name="dataframe_nulls_false_one_col",
@@ -144,3 +159,16 @@ fixture_union(
 )
 
 fixture_union(name="indexed_frame", fixtures=("series", "dataframe"))
+
+fixture_union(name="generic_index", fixtures=("int64_index",))
+
+# TODO: Add MultiIndex
+fixture_union(name="index", fixtures=("generic_index", "range_index"))
+
+fixture_union(name="frame", fixtures=("indexed_frame", "generic_index"))
+
+# Note: pytest_cases isn't smart enough to recognize that the same fixture
+# (generic_index) gets included twice if we directly union "index" and "frame".
+fixture_union(
+    name="frame_or_index", fixtures=("indexed_frame", "generic_index", "range_index")
+)
