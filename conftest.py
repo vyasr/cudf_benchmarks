@@ -1,4 +1,5 @@
 import os
+import string
 import sys
 from itertools import product
 
@@ -54,8 +55,8 @@ def pytest_sessionfinish(session, exitstatus):
 New fixture logic.
 """
 
-num_rows = [100, 10_000]
-num_cols = [1, 5]
+num_rows = [10]
+num_cols = [1]
 
 
 # Core fixtures generated for each common type of object.
@@ -76,11 +77,18 @@ def series_nulls_true(request):
 # that we can recombine all the num_cols==1 fixtures into one union rather than
 # using a parametrized fixture as we do for the series case above.
 def make_dataframe(nr, nc):
-    return cudf.DataFrame({f"{i}": cupy.arange(nr) for i in range(nc)})
+    if nc > len(string.ascii_lowercase):
+        raise ValueError(
+            "make_dataframe does not support more than "
+            f"{len(string.ascii_lowercase)} columns, but {nc} were requested."
+        )
+    return cudf.DataFrame(
+        {f"{string.ascii_lowercase[i]}": cupy.arange(nr) for i in range(nc)}
+    )
 
 
 def make_nullable_dataframe(nr, nc):
-    df = cudf.DataFrame({f"{i}": cupy.arange(nr) for i in range(nc)})
+    df = make_dataframe(nr, nc)
     df.iloc[::2, :] = None
     return df
 
@@ -116,14 +124,21 @@ fixture_union(
 
 
 fixture_union(
-    name="dataframe_nulls_false_one_col",
-    fixtures=[f"dataframe_nulls_false_rows_{nr}_cols_1" for nr in num_rows],
+    name="dataframe_nulls_false_cols_5",
+    fixtures=[f"dataframe_nulls_false_rows_{nr}_cols_5" for nr in num_rows],
 )
 
 fixture_union(
-    name="dataframe_nulls_true_one_col",
-    fixtures=[f"dataframe_nulls_true_rows_{nr}_cols_1" for nr in num_rows],
+    name="dataframe_nulls_true_cols_5",
+    fixtures=[f"dataframe_nulls_true_rows_{nr}_cols_5" for nr in num_rows],
 )
+
+
+fixture_union(
+    name="dataframe_cols_5",
+    fixtures=("dataframe_nulls_true_cols_5", "dataframe_nulls_false_cols_5"),
+)
+
 
 fixture_union(
     name="dataframe_nulls_false",
@@ -169,6 +184,12 @@ fixture_union(name="frame", fixtures=("indexed_frame", "generic_index"))
 
 # Note: pytest_cases isn't smart enough to recognize that the same fixture
 # (generic_index) gets included twice if we directly union "index" and "frame".
+fixture_union(
+    name="frame_or_index_nulls_false",
+    fixtures=("indexed_frame_nulls_false", "generic_index", "range_index"),
+)
+
+
 fixture_union(
     name="frame_or_index", fixtures=("indexed_frame", "generic_index", "range_index")
 )

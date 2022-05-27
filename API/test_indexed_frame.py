@@ -15,3 +15,9 @@ def test_reductions(benchmark, op, indexed_frame):
 
 def test_drop_duplicates(benchmark, indexed_frame):
     benchmark(indexed_frame.drop_duplicates)
+
+
+def test_rangeindex_replace(benchmark, indexed_frame):
+    # TODO: Consider adding more DataFrame-specific benchmarks for different
+    # types of valid inputs (dicts, etc).
+    benchmark(indexed_frame.replace, 0, 2)
