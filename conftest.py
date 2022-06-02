@@ -54,22 +54,35 @@ def pytest_sessionfinish(session, exitstatus):
 """
 New fixture logic.
 """
+# Dynamic fixture creation as discussed in
+# https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
 
 num_rows = [10]
 num_cols = [1]
 
+column_generators = {
+    "int": (lambda nr: cupy.arange(nr)),
+    "float": (lambda nr: cupy.arange(nr).astype(float)),
+}
+
 
 # Core fixtures generated for each common type of object.
-@pytest_cases.fixture(params=num_rows)
 def series_nulls_false(request):
     return cudf.Series(cupy.arange(request.param))
 
 
-@pytest_cases.fixture(params=num_rows)
+name = "series_nulls_false"
+globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(series_nulls_false)
+
+
 def series_nulls_true(request):
     s = cudf.Series(cupy.arange(request.param))
     s.iloc[::2] = None
     return s
+
+
+name = "series_nulls_true"
+globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(series_nulls_true)
 
 
 # Since we may in some cases want to benchmark just single-columned DataFrame
@@ -106,14 +119,20 @@ for nr in num_rows:
         )
 
 
-@pytest_cases.fixture(params=num_rows)
 def range_index(request):
     return cudf.RangeIndex(request.param)
 
 
-@pytest_cases.fixture(params=num_rows)
+name = "range_index"
+globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(range_index)
+
+
 def int64_index(request):
     return cudf.Index(cupy.arange(request.param), dtype="int64")
+
+
+name = "int64_index"
+globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(int64_index)
 
 
 # Various common important fixture unions
