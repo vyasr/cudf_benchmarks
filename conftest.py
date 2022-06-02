@@ -60,63 +60,137 @@ New fixture logic.
 num_rows = [10]
 num_cols = [1]
 
+# A dictionary of callables that create a column of a specified length
 column_generators = {
-    "int": (lambda nr: cupy.arange(nr)),
-    "float": (lambda nr: cupy.arange(nr).astype(float)),
+    "int": cupy.arange,
+    # "float": (lambda nr: cupy.arange(nr, dtype=float)),
 }
 
 
-# Core fixtures generated for each common type of object.
-def series_nulls_false(request):
-    return cudf.Series(cupy.arange(request.param))
+for dtype, column_generator in column_generators.items():
+    # Core fixtures generated for each common type of object.
+    def series_nulls_false(request):
+        return cudf.Series(column_generator(request.param))
 
-
-name = "series_nulls_false"
-globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(series_nulls_false)
-
-
-def series_nulls_true(request):
-    s = cudf.Series(cupy.arange(request.param))
-    s.iloc[::2] = None
-    return s
-
-
-name = "series_nulls_true"
-globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(series_nulls_true)
-
-
-# Since we may in some cases want to benchmark just single-columned DataFrame
-# objects, we generate separate fixtures for each num_rows/num_cols pair so
-# that we can recombine all the num_cols==1 fixtures into one union rather than
-# using a parametrized fixture as we do for the series case above.
-def make_dataframe(nr, nc):
-    if nc > len(string.ascii_lowercase):
-        raise ValueError(
-            "make_dataframe does not support more than "
-            f"{len(string.ascii_lowercase)} columns, but {nc} were requested."
-        )
-    return cudf.DataFrame(
-        {f"{string.ascii_lowercase[i]}": cupy.arange(nr) for i in range(nc)}
+    name = "series_nulls_false"
+    globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(
+        series_nulls_false
     )
 
+    def series_nulls_true(request):
+        s = cudf.Series(column_generator(request.param))
+        s.iloc[::2] = None
+        return s
 
-def make_nullable_dataframe(nr, nc):
-    df = make_dataframe(nr, nc)
-    df.iloc[::2, :] = None
-    return df
+    name = "series_nulls_true"
+    globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(
+        series_nulls_true
+    )
 
-
-for nr in num_rows:
-    for nc in num_cols:
-        name = f"dataframe_nulls_false_rows_{nr}_cols_{nc}"
-        globals()[name] = pytest.fixture(name=name)(
-            lambda nr=nr, nc=nc: make_dataframe(nr, nc)
+    # Since we may in some cases want to benchmark just single-columned DataFrame
+    # objects, we generate separate fixtures for each num_rows/num_cols pair so
+    # that we can recombine all the num_cols==1 fixtures into one union rather than
+    # using a parametrized fixture as we do for the series case above.
+    def make_dataframe(nr, nc):
+        if nc > len(string.ascii_lowercase):
+            raise ValueError(
+                "make_dataframe does not support more than "
+                f"{len(string.ascii_lowercase)} columns, but {nc} were requested."
+            )
+        return cudf.DataFrame(
+            {f"{string.ascii_lowercase[i]}": cupy.arange(nr) for i in range(nc)}
         )
 
-        name = f"dataframe_nulls_true_rows_{nr}_cols_{nc}"
-        globals()[name] = pytest.fixture(name=name)(
-            lambda nr=nr, nc=nc: make_nullable_dataframe(nr, nc)
-        )
+    def make_nullable_dataframe(nr, nc):
+        df = make_dataframe(nr, nc)
+        df.iloc[::2, :] = None
+        return df
+
+    for nr in num_rows:
+        for nc in num_cols:
+            name = f"dataframe_nulls_false_rows_{nr}_cols_{nc}"
+            globals()[name] = pytest.fixture(name=name)(
+                lambda nr=nr, nc=nc: make_dataframe(nr, nc)
+            )
+
+            name = f"dataframe_nulls_true_rows_{nr}_cols_{nc}"
+            globals()[name] = pytest.fixture(name=name)(
+                lambda nr=nr, nc=nc: make_nullable_dataframe(nr, nc)
+            )
+
+    def int64_index(request):
+        return cudf.Index(column_generator(request.param))
+
+    name = "int64_index"
+    globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(int64_index)
+
+    # Various common important fixture unions
+    fixture_union(
+        name="series",
+        fixtures=(["series_nulls_false", "series_nulls_true"]),
+    )
+
+    fixture_union(
+        name="dataframe_nulls_false_cols_5",
+        fixtures=[f"dataframe_nulls_false_rows_{nr}_cols_5" for nr in num_rows],
+    )
+
+    fixture_union(
+        name="dataframe_nulls_true_cols_5",
+        fixtures=[f"dataframe_nulls_true_rows_{nr}_cols_5" for nr in num_rows],
+    )
+
+    fixture_union(
+        name="dataframe_cols_5",
+        fixtures=("dataframe_nulls_true_cols_5", "dataframe_nulls_false_cols_5"),
+    )
+
+    fixture_union(
+        name="dataframe_nulls_false",
+        fixtures=[
+            f"dataframe_nulls_false_rows_{nr}_cols_{nc}"
+            for nr in num_rows
+            for nc in num_cols
+        ],
+    )
+
+    fixture_union(
+        name="dataframe_nulls_true",
+        fixtures=[
+            f"dataframe_nulls_true_rows_{nr}_cols_{nc}"
+            for nr in num_rows
+            for nc in num_cols
+        ],
+    )
+
+    fixture_union(
+        name="dataframe",
+        fixtures=("dataframe_nulls_true", "dataframe_nulls_false"),
+    )
+
+    fixture_union(
+        name="indexed_frame_nulls_false",
+        fixtures=("series_nulls_false", "dataframe_nulls_false"),
+    )
+
+    fixture_union(
+        name="indexed_frame_nulls_true",
+        fixtures=("series_nulls_true", "dataframe_nulls_true"),
+    )
+
+    fixture_union(name="indexed_frame", fixtures=("series", "dataframe"))
+
+    # TODO: Add MultiIndex
+    fixture_union(name="frame", fixtures=("indexed_frame", "int64_index"))
+
+    # Note: pytest_cases isn't smart enough to recognize that the same fixture
+    # (generic_index) gets included twice if we directly union "index" and "frame".
+    fixture_union(
+        name="frame_or_index_nulls_false",
+        fixtures=("indexed_frame_nulls_false", "int64_index"),
+    )
+
+    fixture_union(name="frame_or_index", fixtures=("indexed_frame", "int64_index"))
 
 
 def range_index(request):
@@ -127,88 +201,7 @@ name = "range_index"
 globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(range_index)
 
 
-def int64_index(request):
-    return cudf.Index(cupy.arange(request.param), dtype="int64")
-
-
-name = "int64_index"
-globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(int64_index)
-
-
-# Various common important fixture unions
-fixture_union(
-    name="series",
-    fixtures=(["series_nulls_false", "series_nulls_true"]),
-)
-
-
-fixture_union(
-    name="dataframe_nulls_false_cols_5",
-    fixtures=[f"dataframe_nulls_false_rows_{nr}_cols_5" for nr in num_rows],
-)
-
-fixture_union(
-    name="dataframe_nulls_true_cols_5",
-    fixtures=[f"dataframe_nulls_true_rows_{nr}_cols_5" for nr in num_rows],
-)
-
-
-fixture_union(
-    name="dataframe_cols_5",
-    fixtures=("dataframe_nulls_true_cols_5", "dataframe_nulls_false_cols_5"),
-)
-
-
-fixture_union(
-    name="dataframe_nulls_false",
-    fixtures=[
-        f"dataframe_nulls_false_rows_{nr}_cols_{nc}"
-        for nr in num_rows
-        for nc in num_cols
-    ],
-)
-
-fixture_union(
-    name="dataframe_nulls_true",
-    fixtures=[
-        f"dataframe_nulls_true_rows_{nr}_cols_{nc}"
-        for nr in num_rows
-        for nc in num_cols
-    ],
-)
-
-fixture_union(
-    name="dataframe",
-    fixtures=("dataframe_nulls_true", "dataframe_nulls_false"),
-)
-
-fixture_union(
-    name="indexed_frame_nulls_false",
-    fixtures=("series_nulls_false", "dataframe_nulls_false"),
-)
-
-fixture_union(
-    name="indexed_frame_nulls_true",
-    fixtures=("series_nulls_true", "dataframe_nulls_true"),
-)
-
-fixture_union(name="indexed_frame", fixtures=("series", "dataframe"))
-
-fixture_union(name="generic_index", fixtures=("int64_index",))
-
-# TODO: Add MultiIndex
-fixture_union(name="index", fixtures=("generic_index", "range_index"))
-
-fixture_union(name="frame", fixtures=("indexed_frame", "generic_index"))
-
-# Note: pytest_cases isn't smart enough to recognize that the same fixture
-# (generic_index) gets included twice if we directly union "index" and "frame".
-fixture_union(
-    name="frame_or_index_nulls_false",
-    fixtures=("indexed_frame_nulls_false", "generic_index", "range_index"),
-)
-
-
-fixture_union(
-    name="frame_or_index", fixtures=("indexed_frame", "generic_index", "range_index")
-)
+# fixture_union(name="generic_index", fixtures=("int64_index",))
+#
+# # TODO: Add MultiIndex, also of different dtypes...
+# fixture_union(name="index", fixtures=("generic_index", "range_index"))
