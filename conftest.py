@@ -53,6 +53,48 @@ def pytest_sessionfinish(session, exitstatus):
 
 """
 New fixture logic.
+
+We dynamically generate fixtures to cover the most common matrix of objects required
+throughout benchmarking of cuDF. Specifically, we need to account for the following
+different parameters:
+    - Class of object (DataFrame, Series, Index)
+    - Dtype
+    - Nullability
+    - Size (rows for Series/Index, rows/columns for DataFrame)
+
+We make one assumption, which is that all benchmarks should be tested for data
+with all different possible numbers of rows, so that level of granularity is
+not exposed in the fixtures but is instead parametrized. For DataFrames, we do
+provide specific fixtures for different numbers of columns since not all
+benchmarks need to be run for data with different numbers of columns but could
+instead use a single fixed number and only vary the rows.
+
+Each element of this matrix is constructed as a separate fixture. We employ
+the standard naming scheme
+`classname_dtype_{dtype}_nulls_{true|false}[_cols_{num_cols}]`
+where classname is a lowercased version of the classname. Note that in the case of
+indexes, to match Series/DataFrame we simply set `classname=index` and rely on
+the `dtype_{dtype}` component to delineate which index class is actually in use.
+The `num_cols` component of the name is only used for dataframes.
+
+In addition to the above fixtures, we also provide the following more specialized
+fixtures:
+    - rangeindex: Since RangeIndex always holds int64 data we cannot conflate
+      it with index_dtype_int64 (a true Int64Index), and it cannot hold nulls.
+      As a result, it is provided as a separate fixture.
+    - multiindex: MultiIndex does not support nulls
+
+We then provide a large collection of fixture unions that combine the above fixtures.
+In general, these unions collapse along the three possible dimensions above:
+    - classname: Unions by class result in fixtures that will iterate over
+      multiple types. These unions typically map to actual classes within cuDF,
+      for instance unioning `series*` and `dataframe*` results in `indexedframe*` fixtures.
+    - dtype: Collapsing along dtype is only done for specific combinations that
+      we expect to be useful. Since we don't generally have a use case for a fixture that
+      encompasses _all_ dtypes, these collapses take the form e.g. `dtype_{int_or_float}`
+    - nulls: Collapsing along nulls results in fixtures with this component of
+      the name dropped, e.g. union(`series_nulls_true`, `series_nulls_false`) ->
+      `series`.
 """
 # Dynamic fixture creation as discussed in
 # https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
@@ -67,12 +109,14 @@ column_generators = {
 }
 
 
+# Inside the main loop, perform the collapses over classes and over
+# nullability. Collapsing over dtype can happen later.
 for dtype, column_generator in column_generators.items():
     # Core fixtures generated for each common type of object.
     def series_nulls_false(request):
         return cudf.Series(column_generator(request.param))
 
-    name = "series_nulls_false"
+    name = f"series_dtype_{dtype}_nulls_false"
     globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(
         series_nulls_false
     )
@@ -82,7 +126,7 @@ for dtype, column_generator in column_generators.items():
         s.iloc[::2] = None
         return s
 
-    name = "series_nulls_true"
+    name = f"series_dtype_{dtype}_nulls_true"
     globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(
         series_nulls_true
     )
@@ -108,12 +152,12 @@ for dtype, column_generator in column_generators.items():
 
     for nr in num_rows:
         for nc in num_cols:
-            name = f"dataframe_nulls_false_rows_{nr}_cols_{nc}"
+            name = f"dataframe_dtype_{dtype}_nulls_false_rows_{nr}_cols_{nc}"
             globals()[name] = pytest.fixture(name=name)(
                 lambda nr=nr, nc=nc: make_dataframe(nr, nc)
             )
 
-            name = f"dataframe_nulls_true_rows_{nr}_cols_{nc}"
+            name = f"dataframe_dtype_{dtype}_nulls_true_rows_{nr}_cols_{nc}"
             globals()[name] = pytest.fixture(name=name)(
                 lambda nr=nr, nc=nc: make_nullable_dataframe(nr, nc)
             )
@@ -121,78 +165,108 @@ for dtype, column_generator in column_generators.items():
     def int64_index(request):
         return cudf.Index(column_generator(request.param))
 
-    name = "int64_index"
+    name = f"index_dtype_{dtype}"
     globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(int64_index)
 
     # Various common important fixture unions
     fixture_union(
-        name="series",
-        fixtures=(["series_nulls_false", "series_nulls_true"]),
+        name=f"series_dtype_{dtype}",
+        fixtures=(
+            f"series_dtype_{dtype}_nulls_false",
+            f"series_dtype_{dtype}_nulls_true",
+        ),
     )
 
     fixture_union(
-        name="dataframe_nulls_false_cols_5",
-        fixtures=[f"dataframe_nulls_false_rows_{nr}_cols_5" for nr in num_rows],
-    )
-
-    fixture_union(
-        name="dataframe_nulls_true_cols_5",
-        fixtures=[f"dataframe_nulls_true_rows_{nr}_cols_5" for nr in num_rows],
-    )
-
-    fixture_union(
-        name="dataframe_cols_5",
-        fixtures=("dataframe_nulls_true_cols_5", "dataframe_nulls_false_cols_5"),
-    )
-
-    fixture_union(
-        name="dataframe_nulls_false",
+        name=f"dataframe_dtype_{dtype}_nulls_false_cols_5",
         fixtures=[
-            f"dataframe_nulls_false_rows_{nr}_cols_{nc}"
+            f"dataframe_dtype_{dtype}_nulls_false_rows_{nr}_cols_5" for nr in num_rows
+        ],
+    )
+
+    fixture_union(
+        name=f"dataframe_dtype_{dtype}_nulls_true_cols_5",
+        fixtures=[
+            f"dataframe_dtype_{dtype}_nulls_true_rows_{nr}_cols_5" for nr in num_rows
+        ],
+    )
+
+    fixture_union(
+        name=f"dataframe_dtype_{dtype}_cols_5",
+        fixtures=(
+            f"dataframe_dtype_{dtype}_nulls_true_cols_5",
+            f"dataframe_dtype_{dtype}_nulls_false_cols_5",
+        ),
+    )
+
+    fixture_union(
+        name=f"dataframe_dtype_{dtype}_nulls_false",
+        fixtures=[
+            f"dataframe_dtype_{dtype}_nulls_false_rows_{nr}_cols_{nc}"
             for nr in num_rows
             for nc in num_cols
         ],
     )
 
     fixture_union(
-        name="dataframe_nulls_true",
+        name=f"dataframe_dtype_{dtype}_nulls_true",
         fixtures=[
-            f"dataframe_nulls_true_rows_{nr}_cols_{nc}"
+            f"dataframe_dtype_{dtype}_nulls_true_rows_{nr}_cols_{nc}"
             for nr in num_rows
             for nc in num_cols
         ],
     )
 
     fixture_union(
-        name="dataframe",
-        fixtures=("dataframe_nulls_true", "dataframe_nulls_false"),
+        name=f"dataframe_dtype_{dtype}",
+        fixtures=(
+            f"dataframe_dtype_{dtype}_nulls_true",
+            f"dataframe_dtype_{dtype}_nulls_false",
+        ),
     )
 
     fixture_union(
-        name="indexed_frame_nulls_false",
-        fixtures=("series_nulls_false", "dataframe_nulls_false"),
+        name=f"indexedframe_dtype_{dtype}_nulls_false",
+        fixtures=(
+            f"series_dtype_{dtype}_nulls_false",
+            f"dataframe_dtype_{dtype}_nulls_false",
+        ),
     )
 
     fixture_union(
-        name="indexed_frame_nulls_true",
-        fixtures=("series_nulls_true", "dataframe_nulls_true"),
+        name=f"indexedframe_dtype_{dtype}_nulls_true",
+        fixtures=(
+            f"series_dtype_{dtype}_nulls_true",
+            f"dataframe_dtype_{dtype}_nulls_true",
+        ),
     )
 
-    fixture_union(name="indexed_frame", fixtures=("series", "dataframe"))
+    fixture_union(
+        name=f"indexedframe_dtype_{dtype}",
+        fixtures=(f"series_dtype_{dtype}", f"dataframe_dtype_{dtype}"),
+    )
 
     # TODO: Add MultiIndex
-    fixture_union(name="frame", fixtures=("indexed_frame", "int64_index"))
-
-    # Note: pytest_cases isn't smart enough to recognize that the same fixture
-    # (generic_index) gets included twice if we directly union "index" and "frame".
     fixture_union(
-        name="frame_or_index_nulls_false",
-        fixtures=("indexed_frame_nulls_false", "int64_index"),
+        name=f"frame_dtype_{dtype}",
+        fixtures=(f"indexedframe_dtype_{dtype}", f"index_dtype_{dtype}"),
     )
 
-    fixture_union(name="frame_or_index", fixtures=("indexed_frame", "int64_index"))
+    # Note: pytest_cases isn't smart enough to recognize that the same fixture
+    # (generic_index) gets included twice if we directly union "index" and
+    # "frame".
+    fixture_union(
+        name=f"frame_or_index_dtype_{dtype}_nulls_false",
+        fixtures=(f"indexedframe_dtype_{dtype}_nulls_false", f"index_dtype_{dtype}"),
+    )
+
+    fixture_union(
+        name=f"frame_or_index_dtype_{dtype}",
+        fixtures=(f"indexedframe_dtype_{dtype}", f"index_dtype_{dtype}"),
+    )
 
 
+# TODO: Figure out how to incorporate RangeIndex and MultiIndex fixtures.
 def range_index(request):
     return cudf.RangeIndex(request.param)
 

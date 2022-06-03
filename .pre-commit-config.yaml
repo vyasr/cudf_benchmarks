@@ -18,7 +18,7 @@ repos:
     hooks:
       - id: flake8
         args:
-          - "--max-line-length=88"
+          - "--max-line-length=97"
           - "--per-file-ignores=conftest.py:E402"
 
 default_language_version:
