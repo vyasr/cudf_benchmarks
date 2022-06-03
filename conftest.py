@@ -108,11 +108,15 @@ column_generators = {
     # "float": (lambda nr: cupy.arange(nr, dtype=float)),
 }
 
+# def create_fixture_from_function(name, func, **kwargs):
+#     globals()[name] = pytest_cases.fixture(name=name, **kwargs)(
+#         series_nulls_false
+#     )
 
-# Inside the main loop, perform the collapses over classes and over
-# nullability. Collapsing over dtype can happen later.
+
+# First generate all the base fixtures.
 for dtype, column_generator in column_generators.items():
-    # Core fixtures generated for each common type of object.
+
     def series_nulls_false(request):
         return cudf.Series(column_generator(request.param))
 
@@ -152,44 +156,52 @@ for dtype, column_generator in column_generators.items():
 
     for nr in num_rows:
         for nc in num_cols:
+            # TODO: pytest_cases seems to have a bug where the first argument
+            # being a kwarg (nr=nr, nc=nc) raises errors. I'll need to track
+            # that upstream.
+            def dataframe(request, nr=nr, nc=nc):
+                return make_dataframe(nr, nc)
+
             name = f"dataframe_dtype_{dtype}_nulls_false_rows_{nr}_cols_{nc}"
-            globals()[name] = pytest.fixture(name=name)(
-                lambda nr=nr, nc=nc: make_dataframe(nr, nc)
-            )
+            globals()[name] = pytest_cases.fixture(name=name)(dataframe)
+
+            def dataframe(request, nr=nr, nc=nc):
+                return make_nullable_dataframe(nr, nc)
 
             name = f"dataframe_dtype_{dtype}_nulls_true_rows_{nr}_cols_{nc}"
-            globals()[name] = pytest.fixture(name=name)(
-                lambda nr=nr, nc=nc: make_nullable_dataframe(nr, nc)
-            )
+            globals()[name] = pytest_cases.fixture(name=name)(dataframe)
 
+    # Index fixture. Note that we choose not to create a nullable index fixture
+    # since that's such an unnecessary and esoteric use-case.
     def int64_index(request):
         return cudf.Index(column_generator(request.param))
 
     name = f"index_dtype_{dtype}"
     globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(int64_index)
 
-    # Various common important fixture unions
-    fixture_union(
-        name=f"series_dtype_{dtype}",
-        fixtures=(
-            f"series_dtype_{dtype}_nulls_false",
-            f"series_dtype_{dtype}_nulls_true",
-        ),
-    )
 
-    fixture_union(
-        name=f"dataframe_dtype_{dtype}_nulls_false_cols_5",
-        fixtures=[
-            f"dataframe_dtype_{dtype}_nulls_false_rows_{nr}_cols_5" for nr in num_rows
-        ],
-    )
+# Inside the main loop, perform the collapses over classes and over
+# nullability. Collapsing over dtype can happen later.
 
-    fixture_union(
-        name=f"dataframe_dtype_{dtype}_nulls_true_cols_5",
-        fixtures=[
-            f"dataframe_dtype_{dtype}_nulls_true_rows_{nr}_cols_5" for nr in num_rows
-        ],
-    )
+
+for dtype, column_generator in column_generators.items():
+    for nulls in ["false", "true"]:
+        fixture_union(
+            name=f"dataframe_dtype_{dtype}_nulls_{nulls}",
+            fixtures=[
+                f"dataframe_dtype_{dtype}_nulls_{nulls}_rows_{nr}_cols_{nc}"
+                for nr in num_rows
+                for nc in num_cols
+            ],
+        )
+
+        fixture_union(
+            name=f"dataframe_dtype_{dtype}_nulls_{nulls}_cols_5",
+            fixtures=[
+                f"dataframe_dtype_{dtype}_nulls_{nulls}_rows_{nr}_cols_5"
+                for nr in num_rows
+            ],
+        )
 
     fixture_union(
         name=f"dataframe_dtype_{dtype}_cols_5",
@@ -199,52 +211,25 @@ for dtype, column_generator in column_generators.items():
         ),
     )
 
-    fixture_union(
-        name=f"dataframe_dtype_{dtype}_nulls_false",
-        fixtures=[
-            f"dataframe_dtype_{dtype}_nulls_false_rows_{nr}_cols_{nc}"
-            for nr in num_rows
-            for nc in num_cols
-        ],
-    )
+    # Collapse over nulls:
+    for classname in ["series", "dataframe"]:
+        # Various common important fixture unions
+        fixture_union(
+            name=f"{classname}_dtype_{dtype}",
+            fixtures=(
+                f"{classname}_dtype_{dtype}_nulls_false",
+                f"{classname}_dtype_{dtype}_nulls_true",
+            ),
+        )
 
-    fixture_union(
-        name=f"dataframe_dtype_{dtype}_nulls_true",
-        fixtures=[
-            f"dataframe_dtype_{dtype}_nulls_true_rows_{nr}_cols_{nc}"
-            for nr in num_rows
-            for nc in num_cols
-        ],
-    )
-
-    fixture_union(
-        name=f"dataframe_dtype_{dtype}",
-        fixtures=(
-            f"dataframe_dtype_{dtype}_nulls_true",
-            f"dataframe_dtype_{dtype}_nulls_false",
-        ),
-    )
-
-    fixture_union(
-        name=f"indexedframe_dtype_{dtype}_nulls_false",
-        fixtures=(
-            f"series_dtype_{dtype}_nulls_false",
-            f"dataframe_dtype_{dtype}_nulls_false",
-        ),
-    )
-
-    fixture_union(
-        name=f"indexedframe_dtype_{dtype}_nulls_true",
-        fixtures=(
-            f"series_dtype_{dtype}_nulls_true",
-            f"dataframe_dtype_{dtype}_nulls_true",
-        ),
-    )
-
-    fixture_union(
-        name=f"indexedframe_dtype_{dtype}",
-        fixtures=(f"series_dtype_{dtype}", f"dataframe_dtype_{dtype}"),
-    )
+    for nulls in ["_nulls_false", "_nulls_true", ""]:
+        fixture_union(
+            name=f"indexedframe_dtype_{dtype}{nulls}",
+            fixtures=(
+                f"series_dtype_{dtype}{nulls}",
+                f"dataframe_dtype_{dtype}{nulls}",
+            ),
+        )
 
     # TODO: Add MultiIndex
     fixture_union(
