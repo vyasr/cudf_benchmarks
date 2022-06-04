@@ -144,8 +144,7 @@ column_generators = {
     # "float": (lambda nr: cupy.arange(nr, dtype=float)),
 }
 
-fixtures = {}
-fixtures[0] = OrderedSet()
+fixtures = {0: OrderedSet()}
 
 
 def make_fixture(name, func, **kwargs):
@@ -226,7 +225,7 @@ for dtype, column_generator in column_generators.items():
     make_fixture(f"index_dtype_{dtype}_nulls_false", index_nulls_false, params=num_rows)
 
 
-def collapse_fixtures(fixtures, collapser, new_fixture_set, never_added):
+def collapse_fixtures(fixtures, pattern, repl, new_fixture_set):
     """Create unions of fixtures based on specific name mappings.
 
     A collapser is a callable that maps fixture names into unions. The
@@ -234,31 +233,26 @@ def collapse_fixtures(fixtures, collapser, new_fixture_set, never_added):
     track of fixtures that were not added to any union to know that they were
     not collapsed and should be considered in future iterations.
     """
+    used = OrderedSet()
+
+    def collapser(n):
+        return re.sub(pattern, repl, n)
 
     for name, group_fixtures in groupby(sorted(fixtures, key=collapser), key=collapser):
         # If the groupby doesn't actually collapse anything, just toss the fixture
         # back into the pool for the next round of collapse.
         group_fixtures = list(group_fixtures)
         if len(group_fixtures) > 1:
-            # After one level of collapsing we can arrive at the same fixtures
-            # more than one way (e.g. we could collapse nulls and
-            # series|dataframe->index in either order). As long as either of
-            # those happened, we don't count the fixture as one that was never
-            # added to anything. Therefore, any non-singleton group is
-            # sufficient to indicate that the constitutent fixtures were added
-            # to a new union (and hence the for loop below is not within the
-            # conditional below), but that union may already have been created
-            # so the conditional below is necessary to avoid duplicates.
+            # The presence of a fixture in any non-singleton group indicates
+            # that it is included in some resulting union. There may be
+            # multiple paths to that union, though, so we update this set
+            # even if the fixture has already been created.
+            used = used | OrderedSet(group_fixtures)
+
             if name not in new_fixture_set:
                 fixture_union(name=name, fixtures=group_fixtures)
                 new_fixture_set.add(name)
-
-            for f in group_fixtures:
-                # It's OK if it's already been removed.
-                try:
-                    never_added.remove(f)
-                except KeyError:
-                    pass
+    return used
 
 
 # TODO: Rather than using sets, we need to use dicts with empty values because
@@ -270,28 +264,29 @@ cur_level_fixtures = fixtures[cur_level]
 never_added = OrderedSet()
 
 # Loop until no new fixtures are added.
-while cur_level_fixtures:
+while fixtures[cur_level]:
     # Anything that wasn't added to any of the unions at the previous level is
     # effectively already one level higher because none of the previous
-    # collapsers had any effect.
-    prev_level_fixtures = cur_level_fixtures | never_added
-    never_added = prev_level_fixtures.copy()
-
+    # collapsers had any effect, so we need to reconsider for combining in this
+    # stage.
+    prev_level_fixtures = fixtures[cur_level] | never_added
     cur_level += 1
-    cur_level_fixtures = fixtures[cur_level] = OrderedSet()
+    fixtures[cur_level] = OrderedSet()
 
     # TODO: May need to have different collapsers at different levels?
-    for collapser in [
-        lambda n: re.sub("_nulls_(true|false)", "", n),
-        lambda n: re.sub("series|dataframe", "indexedframe", n),
-        lambda n: re.sub("indexedframe|index", "frame_or_index", n),
+    used = OrderedSet()
+    for pattern, repl in [
+        ("_nulls_(true|false)", ""),
+        ("series|dataframe", "indexedframe"),
+        ("indexedframe|index", "frame_or_index"),
     ]:
-        collapse_fixtures(
+        used = used | collapse_fixtures(
             prev_level_fixtures,
-            collapser,
-            cur_level_fixtures,
-            never_added,
+            pattern,
+            repl,
+            fixtures[cur_level],
         )
+    never_added = prev_level_fixtures - used
 
 for dtype, column_generator in column_generators.items():
     # Have to manually add this one because we aren't including nullable
