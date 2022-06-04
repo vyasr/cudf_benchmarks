@@ -2,6 +2,7 @@ import os
 import re
 import string
 import sys
+from collections.abc import MutableSet
 from itertools import groupby, product
 
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
@@ -100,6 +101,40 @@ In general, these unions collapse along the three possible dimensions above:
 # Dynamic fixture creation as discussed in
 # https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
 
+
+class OrderedSet(MutableSet):
+    """A minimal OrderedSet implementation built on a dict.
+
+    This implementation exploits the fact that dicts are ordered as of Python
+    3.7. It is not intended to be performant, so only the minimal set of
+    methods are implemented. We need this class to ensure that fixture names
+    are constructed deterministically, otherwise pytest-xdist will complain if
+    different threads have seemingly different tests.
+    """
+
+    def __init__(self, args=None):
+        args = args or []
+        self._data = {value: None for value in args}
+
+    def __contains__(self, key):
+        return key in self._data
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+    def add(self, value):
+        self._data[value] = None
+
+    def discard(self, value):
+        self._data.pop(value, None)
+
+    def copy(self):
+        return OrderedSet(self._data)
+
+
 num_rows = [10]
 num_cols = [1]
 
@@ -110,7 +145,7 @@ column_generators = {
 }
 
 fixtures = {}
-fixtures[0] = set()
+fixtures[0] = OrderedSet()
 
 
 def make_fixture(name, func, **kwargs):
@@ -232,7 +267,7 @@ def collapse_fixtures(fixtures, collapser, new_fixture_set, never_added):
 # and then it will fail because they look like different fixtures.
 cur_level = 0
 cur_level_fixtures = fixtures[cur_level]
-never_added = set()
+never_added = OrderedSet()
 
 # Loop until no new fixtures are added.
 while cur_level_fixtures:
@@ -243,7 +278,7 @@ while cur_level_fixtures:
     never_added = prev_level_fixtures.copy()
 
     cur_level += 1
-    cur_level_fixtures = fixtures[cur_level] = set()
+    cur_level_fixtures = fixtures[cur_level] = OrderedSet()
 
     # TODO: May need to have different collapsers at different levels?
     for collapser in [
