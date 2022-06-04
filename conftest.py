@@ -1,7 +1,8 @@
 import os
+import re
 import string
 import sys
-from itertools import product
+from itertools import groupby, product
 
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
@@ -108,146 +109,162 @@ column_generators = {
     # "float": (lambda nr: cupy.arange(nr, dtype=float)),
 }
 
-# def create_fixture_from_function(name, func, **kwargs):
-#     globals()[name] = pytest_cases.fixture(name=name, **kwargs)(
-#         series_nulls_false
-#     )
+fixtures = {}
+fixtures[0] = set()
+
+
+def make_fixture(name, func, **kwargs):
+    globals()[name] = pytest_cases.fixture(name=name, **kwargs)(func)
+    global fixtures
+    fixtures[0].add(name)
 
 
 # First generate all the base fixtures.
 for dtype, column_generator in column_generators.items():
 
-    def series_nulls_false(request):
+    def series_nulls_false(request, column_generator=column_generator):
         return cudf.Series(column_generator(request.param))
 
-    name = f"series_dtype_{dtype}_nulls_false"
-    globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(
-        series_nulls_false
+    make_fixture(
+        f"series_dtype_{dtype}_nulls_false", series_nulls_false, params=num_rows
     )
 
-    def series_nulls_true(request):
+    def series_nulls_true(request, column_generator=column_generator):
         s = cudf.Series(column_generator(request.param))
         s.iloc[::2] = None
         return s
 
-    name = f"series_dtype_{dtype}_nulls_true"
-    globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(
-        series_nulls_true
-    )
+    make_fixture(f"series_dtype_{dtype}_nulls_true", series_nulls_true, params=num_rows)
 
-    # Since we may in some cases want to benchmark just single-columned DataFrame
-    # objects, we generate separate fixtures for each num_rows/num_cols pair so
-    # that we can recombine all the num_cols==1 fixtures into one union rather than
-    # using a parametrized fixture as we do for the series case above.
-    def make_dataframe(nr, nc):
-        if nc > len(string.ascii_lowercase):
-            raise ValueError(
-                "make_dataframe does not support more than "
-                f"{len(string.ascii_lowercase)} columns, but {nc} were requested."
-            )
+    # Since we may in some cases want to benchmark just DataFrames with a
+    # specific number of columns rather than iterating over all numbers of
+    # columns, we don't include the number of columns in the fixture
+    # parametrization and instead create separate fixtures to be recombined
+    # later.
+    def make_dataframe(nr, nc, column_generator=column_generator):
+        assert nc <= len(string.ascii_lowercase)
         return cudf.DataFrame(
-            {f"{string.ascii_lowercase[i]}": cupy.arange(nr) for i in range(nc)}
+            {f"{string.ascii_lowercase[i]}": column_generator(nr) for i in range(nc)}
         )
 
-    def make_nullable_dataframe(nr, nc):
-        df = make_dataframe(nr, nc)
-        df.iloc[::2, :] = None
-        return df
+    for nc in num_cols:
+        # TODO: pytest_cases seems to have a bug where the first argument
+        # being a kwarg (nr=nr, nc=nc) raises errors. I'll need to track
+        # that upstream, but for now that's no longer an issue since I'm
+        # passing request as a positional parameter.
+        def dataframe_nulls_false(request, nc=nc):
+            return make_dataframe(request.param, nc)
 
-    for nr in num_rows:
-        for nc in num_cols:
-            # TODO: pytest_cases seems to have a bug where the first argument
-            # being a kwarg (nr=nr, nc=nc) raises errors. I'll need to track
-            # that upstream.
-            def dataframe(request, nr=nr, nc=nc):
-                return make_dataframe(nr, nc)
+        make_fixture(
+            f"dataframe_dtype_{dtype}_nulls_false_cols_{nc}",
+            dataframe_nulls_false,
+            params=num_rows,
+        )
 
-            name = f"dataframe_dtype_{dtype}_nulls_false_rows_{nr}_cols_{nc}"
-            globals()[name] = pytest_cases.fixture(name=name)(dataframe)
+        def dataframe_nulls_true(request, nc=nc):
+            df = make_dataframe(request.param, nc)
+            df.iloc[::2, :] = None
+            return df
 
-            def dataframe(request, nr=nr, nc=nc):
-                return make_nullable_dataframe(nr, nc)
+        make_fixture(
+            f"dataframe_dtype_{dtype}_nulls_true_cols_{nc}",
+            dataframe_nulls_true,
+            params=num_rows,
+        )
 
-            name = f"dataframe_dtype_{dtype}_nulls_true_rows_{nr}_cols_{nc}"
-            globals()[name] = pytest_cases.fixture(name=name)(dataframe)
+    # Create the combined dataframe fixtures for different numbers of columns.
+    for nulls in ["false", "true"]:
+        name = f"dataframe_dtype_{dtype}_nulls_{nulls}"
+        fixture_union(
+            name=name,
+            fixtures=[
+                f"dataframe_dtype_{dtype}_nulls_{nulls}_cols_{nc}" for nc in num_cols
+            ],
+        )
+        fixtures[0].add(name)
 
     # Index fixture. Note that we choose not to create a nullable index fixture
     # since that's such an unnecessary and esoteric use-case.
-    def int64_index(request):
+    def index_nulls_false(request, column_generator=column_generator):
         return cudf.Index(column_generator(request.param))
 
-    name = f"index_dtype_{dtype}"
-    globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(int64_index)
+    make_fixture(f"index_dtype_{dtype}_nulls_false", index_nulls_false, params=num_rows)
 
 
-# Inside the main loop, perform the collapses over classes and over
-# nullability. Collapsing over dtype can happen later.
+def collapse_fixtures(fixtures, collapser, new_fixture_set, never_added):
+    """Create unions of fixtures based on specific name mappings.
 
+    A collapser is a callable that maps fixture names into unions. The
+    assumption is that this will be a many to one mapping. We need to keep
+    track of fixtures that were not added to any union to know that they were
+    not collapsed and should be considered in future iterations.
+    """
+
+    for name, group_fixtures in groupby(sorted(fixtures, key=collapser), key=collapser):
+        # If the groupby doesn't actually collapse anything, just toss the fixture
+        # back into the pool for the next round of collapse.
+        group_fixtures = list(group_fixtures)
+        if len(group_fixtures) > 1:
+            # After one level of collapsing we can arrive at the same fixtures
+            # more than one way (e.g. we could collapse nulls and
+            # series|dataframe->index in either order). As long as either of
+            # those happened, we don't count the fixture as one that was never
+            # added to anything. Therefore, any non-singleton group is
+            # sufficient to indicate that the constitutent fixtures were added
+            # to a new union (and hence the for loop below is not within the
+            # conditional below), but that union may already have been created
+            # so the conditional below is necessary to avoid duplicates.
+            if name not in new_fixture_set:
+                fixture_union(name=name, fixtures=group_fixtures)
+                new_fixture_set.add(name)
+
+            for f in group_fixtures:
+                # It's OK if it's already been removed.
+                try:
+                    never_added.remove(f)
+                except KeyError:
+                    pass
+
+
+# TODO: Rather than using sets, we need to use dicts with empty values because
+# we need the results to be ordered. Without that, when we use pytest-xdist it
+# is possible for different threads to collapse fixtures in different orders,
+# and then it will fail because they look like different fixtures.
+cur_level = 0
+cur_level_fixtures = fixtures[cur_level]
+never_added = set()
+
+# Loop until no new fixtures are added.
+while cur_level_fixtures:
+    # Anything that wasn't added to any of the unions at the previous level is
+    # effectively already one level higher because none of the previous
+    # collapsers had any effect.
+    prev_level_fixtures = cur_level_fixtures | never_added
+    never_added = prev_level_fixtures.copy()
+
+    cur_level += 1
+    cur_level_fixtures = fixtures[cur_level] = set()
+
+    # TODO: May need to have different collapsers at different levels?
+    for collapser in [
+        lambda n: re.sub("_nulls_(true|false)", "", n),
+        lambda n: re.sub("series|dataframe", "indexedframe", n),
+        lambda n: re.sub("indexedframe|index", "frame_or_index", n),
+    ]:
+        collapse_fixtures(
+            prev_level_fixtures,
+            collapser,
+            cur_level_fixtures,
+            never_added,
+        )
 
 for dtype, column_generator in column_generators.items():
-    for nulls in ["false", "true"]:
-        fixture_union(
-            name=f"dataframe_dtype_{dtype}_nulls_{nulls}",
-            fixtures=[
-                f"dataframe_dtype_{dtype}_nulls_{nulls}_rows_{nr}_cols_{nc}"
-                for nr in num_rows
-                for nc in num_cols
-            ],
-        )
-
-        fixture_union(
-            name=f"dataframe_dtype_{dtype}_nulls_{nulls}_cols_5",
-            fixtures=[
-                f"dataframe_dtype_{dtype}_nulls_{nulls}_rows_{nr}_cols_5"
-                for nr in num_rows
-            ],
-        )
-
-    fixture_union(
-        name=f"dataframe_dtype_{dtype}_cols_5",
-        fixtures=(
-            f"dataframe_dtype_{dtype}_nulls_true_cols_5",
-            f"dataframe_dtype_{dtype}_nulls_false_cols_5",
-        ),
-    )
-
-    # Collapse over nulls:
-    for classname in ["series", "dataframe"]:
-        # Various common important fixture unions
-        fixture_union(
-            name=f"{classname}_dtype_{dtype}",
-            fixtures=(
-                f"{classname}_dtype_{dtype}_nulls_false",
-                f"{classname}_dtype_{dtype}_nulls_true",
-            ),
-        )
-
-    for nulls in ["_nulls_false", "_nulls_true", ""]:
-        fixture_union(
-            name=f"indexedframe_dtype_{dtype}{nulls}",
-            fixtures=(
-                f"series_dtype_{dtype}{nulls}",
-                f"dataframe_dtype_{dtype}{nulls}",
-            ),
-        )
-
-    # TODO: Add MultiIndex
-    fixture_union(
-        name=f"frame_dtype_{dtype}",
-        fixtures=(f"indexedframe_dtype_{dtype}", f"index_dtype_{dtype}"),
-    )
-
-    # Note: pytest_cases isn't smart enough to recognize that the same fixture
-    # (generic_index) gets included twice if we directly union "index" and
-    # "frame".
-    fixture_union(
-        name=f"frame_or_index_dtype_{dtype}_nulls_false",
-        fixtures=(f"indexedframe_dtype_{dtype}_nulls_false", f"index_dtype_{dtype}"),
-    )
-
+    # Have to manually add this one because we aren't including nullable
+    # indexes but we want to be able to run some benchmarks on Series/DataFrame
+    # that may or may not be nullable as well as Index objects.
     fixture_union(
         name=f"frame_or_index_dtype_{dtype}",
-        fixtures=(f"indexedframe_dtype_{dtype}", f"index_dtype_{dtype}"),
+        fixtures=(f"indexedframe_dtype_{dtype}", f"index_dtype_{dtype}_nulls_false"),
     )
 
 
