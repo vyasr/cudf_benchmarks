@@ -3,6 +3,7 @@ import re
 import string
 import sys
 from collections.abc import MutableSet
+from functools import partial
 from itertools import groupby, product
 
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
@@ -98,8 +99,43 @@ In general, these unions collapse along the three possible dimensions above:
       the name dropped, e.g. union(`series_nulls_true`, `series_nulls_false`) ->
       `series`.
 """
-# Dynamic fixture creation as discussed in
-# https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
+
+
+def make_fixture(name, func, new_fixtures, **kwargs):
+    """Create a named fixture and inject it into the global namespace.
+
+    https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
+    explains why this hack is necessary.
+    """
+    globals()[name] = pytest_cases.fixture(name=name, **kwargs)(func)
+    new_fixtures.add(name)
+
+
+def collapse_fixtures(fixtures, pattern, repl, new_fixtures, used):
+    """Create unions of fixtures based on specific name mappings.
+
+    `fixtures` are grouped into unions according the regex replacement
+    `re.sub(pattern, repl)` and placed into `new_fixtures`. `used` is
+    updated with any element of `fixtures` that participated in a union.
+    """
+
+    def collapser(n):
+        return re.sub(pattern, repl, n)
+
+    for name, group in groupby(sorted(fixtures, key=collapser), key=collapser):
+        group = list(group)
+        if len(group) > 1:
+            # The presence of a fixture in any non-singleton group indicates
+            # that it is included in some resulting union. There may be
+            # multiple paths to that union (and those paths could have been
+            # traversed in previous calls to collapse fixtures with the same
+            # new_fixtures), so we must update this set even if the fixture
+            # has already been created (i.e. ahead of the below conditional).
+            used |= OrderedSet(group)
+
+            if name not in new_fixtures:
+                fixture_union(name=name, fixtures=group)
+                new_fixtures.add(name)
 
 
 class OrderedSet(MutableSet):
@@ -135,23 +171,16 @@ class OrderedSet(MutableSet):
         return OrderedSet(self._data)
 
 
-num_rows = [10]
-num_cols = [1]
-
 # A dictionary of callables that create a column of a specified length
 column_generators = {
     "int": cupy.arange,
     # "float": (lambda nr: cupy.arange(nr, dtype=float)),
 }
 
+num_rows = [10]
+num_cols = [1]
 fixtures = {0: OrderedSet()}
-
-
-def make_fixture(name, func, **kwargs):
-    globals()[name] = pytest_cases.fixture(name=name, **kwargs)(func)
-    global fixtures
-    fixtures[0].add(name)
-
+make_fixture_level_0 = partial(make_fixture, new_fixtures=fixtures[0], params=num_rows)
 
 # First generate all the base fixtures.
 for dtype, column_generator in column_generators.items():
@@ -159,22 +188,18 @@ for dtype, column_generator in column_generators.items():
     def series_nulls_false(request, column_generator=column_generator):
         return cudf.Series(column_generator(request.param))
 
-    make_fixture(
-        f"series_dtype_{dtype}_nulls_false", series_nulls_false, params=num_rows
-    )
+    make_fixture_level_0(f"series_dtype_{dtype}_nulls_false", series_nulls_false)
 
     def series_nulls_true(request, column_generator=column_generator):
         s = cudf.Series(column_generator(request.param))
         s.iloc[::2] = None
         return s
 
-    make_fixture(f"series_dtype_{dtype}_nulls_true", series_nulls_true, params=num_rows)
+    make_fixture_level_0(f"series_dtype_{dtype}_nulls_true", series_nulls_true)
 
     # Since we may in some cases want to benchmark just DataFrames with a
-    # specific number of columns rather than iterating over all numbers of
-    # columns, we don't include the number of columns in the fixture
-    # parametrization and instead create separate fixtures to be recombined
-    # later.
+    # specific number of columns, we create separate fixtures for different
+    # numbers of columns to be combined later.
     def make_dataframe(nr, nc, column_generator=column_generator):
         assert nc <= len(string.ascii_lowercase)
         return cudf.DataFrame(
@@ -189,10 +214,9 @@ for dtype, column_generator in column_generators.items():
         def dataframe_nulls_false(request, nc=nc):
             return make_dataframe(request.param, nc)
 
-        make_fixture(
+        make_fixture_level_0(
             f"dataframe_dtype_{dtype}_nulls_false_cols_{nc}",
             dataframe_nulls_false,
-            params=num_rows,
         )
 
         def dataframe_nulls_true(request, nc=nc):
@@ -200,10 +224,9 @@ for dtype, column_generator in column_generators.items():
             df.iloc[::2, :] = None
             return df
 
-        make_fixture(
+        make_fixture_level_0(
             f"dataframe_dtype_{dtype}_nulls_true_cols_{nc}",
             dataframe_nulls_true,
-            params=num_rows,
         )
 
     # Create the combined dataframe fixtures for different numbers of columns.
@@ -217,79 +240,40 @@ for dtype, column_generator in column_generators.items():
         )
         fixtures[0].add(name)
 
-    # Index fixture. Note that we choose not to create a nullable index fixture
-    # since that's such an unnecessary and esoteric use-case.
+    # For now, not bothering to include a nullable index fixture.
     def index_nulls_false(request, column_generator=column_generator):
         return cudf.Index(column_generator(request.param))
 
-    make_fixture(f"index_dtype_{dtype}_nulls_false", index_nulls_false, params=num_rows)
+    make_fixture_level_0(f"index_dtype_{dtype}_nulls_false", index_nulls_false)
 
 
-def collapse_fixtures(fixtures, pattern, repl, new_fixture_set):
-    """Create unions of fixtures based on specific name mappings.
-
-    A collapser is a callable that maps fixture names into unions. The
-    assumption is that this will be a many to one mapping. We need to keep
-    track of fixtures that were not added to any union to know that they were
-    not collapsed and should be considered in future iterations.
-    """
-    used = OrderedSet()
-
-    def collapser(n):
-        return re.sub(pattern, repl, n)
-
-    for name, group_fixtures in groupby(sorted(fixtures, key=collapser), key=collapser):
-        # If the groupby doesn't actually collapse anything, just toss the fixture
-        # back into the pool for the next round of collapse.
-        group_fixtures = list(group_fixtures)
-        if len(group_fixtures) > 1:
-            # The presence of a fixture in any non-singleton group indicates
-            # that it is included in some resulting union. There may be
-            # multiple paths to that union, though, so we update this set
-            # even if the fixture has already been created.
-            used = used | OrderedSet(group_fixtures)
-
-            if name not in new_fixture_set:
-                fixture_union(name=name, fixtures=group_fixtures)
-                new_fixture_set.add(name)
-    return used
-
-
-# TODO: Rather than using sets, we need to use dicts with empty values because
-# we need the results to be ordered. Without that, when we use pytest-xdist it
-# is possible for different threads to collapse fixtures in different orders,
-# and then it will fail because they look like different fixtures.
 cur_level = 0
-cur_level_fixtures = fixtures[cur_level]
-never_added = OrderedSet()
+prev_fixtures = fixtures[cur_level]
 
-# Loop until no new fixtures are added.
+# Loop through "levels" of merging fixtures until no new fixtures are added.
 while fixtures[cur_level]:
-    # Anything that wasn't added to any of the unions at the previous level is
-    # effectively already one level higher because none of the previous
-    # collapsers had any effect, so we need to reconsider for combining in this
-    # stage.
-    prev_level_fixtures = fixtures[cur_level] | never_added
     cur_level += 1
     fixtures[cur_level] = OrderedSet()
 
-    # TODO: May need to have different collapsers at different levels?
     used = OrderedSet()
-    for pattern, repl in [
+    for pat, repl in [
         ("_nulls_(true|false)", ""),
         ("series|dataframe", "indexedframe"),
         ("indexedframe|index", "frame_or_index"),
     ]:
-        used = used | collapse_fixtures(
-            prev_level_fixtures,
-            pattern,
+        collapse_fixtures(
+            prev_fixtures,
+            pat,
             repl,
             fixtures[cur_level],
+            used,
         )
-    never_added = prev_level_fixtures - used
+    # Anything that wasn't added to any of the unions is effectively already
+    # collapsed, so we need to reconsider those in the next stage.
+    prev_fixtures = fixtures[cur_level] | (fixtures[cur_level - 1] - used)
 
 for dtype, column_generator in column_generators.items():
-    # Have to manually add this one because we aren't including nullable
+    # We have to manually add this one because we aren't including nullable
     # indexes but we want to be able to run some benchmarks on Series/DataFrame
     # that may or may not be nullable as well as Index objects.
     fixture_union(
