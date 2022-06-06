@@ -1,3 +1,5 @@
+"""Benchmarks of free functions that accept cudf objects."""
+
 import pytest
 from config import cudf
 

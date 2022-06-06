@@ -1,3 +1,5 @@
+"""Benchmarks of Series methods."""
+
 import pytest
 
 
