@@ -16,10 +16,10 @@ def test_eval_func(benchmark, expr, dataframe_dtype_float_cols_6):
     "nkey_cols",
     [2, 3, 4],
 )
-def test_merge(benchmark, dataframe_dtype_int_cols_6, nkey_cols):
+def test_merge(benchmark, dataframe_dtype_int_nulls_false_cols_6, nkey_cols):
     benchmark(
-        dataframe_dtype_int_cols_6.merge,
-        dataframe_dtype_int_cols_6,
+        dataframe_dtype_int_nulls_false_cols_6.merge,
+        dataframe_dtype_int_nulls_false_cols_6,
         on=[f"{string.ascii_lowercase[i]}" for i in range(nkey_cols)],
     )
 
