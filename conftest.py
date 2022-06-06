@@ -4,45 +4,19 @@ import string
 import sys
 from collections.abc import MutableSet
 from functools import partial
-from itertools import groupby, product
-
-sys.path.insert(0, os.path.join(os.getcwd(), "common"))
+from itertools import groupby
 
 import pytest
 import pytest_cases
-from pytest_cases import fixture_union
 
-from common.config import cudf, cupy
-from common.utils import make_col, make_frame
+sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
-
-@pytest.fixture(params=product([100, 10000], [True, False]))
-def col(request):
-    """Create a cudf column.
-
-    The two parameters are `nrows` and `has_nulls`
-    """
-    return make_col(*request.param)
-
-
-@pytest.fixture(params=[100, 10000])
-def df(request):
-    """Create a cudf DataFrame.
-
-    The two parameters are `nrows`
-    """
-    return make_frame(ncols=5, nkey_cols=0, nrows=request.param)
+from common.config import cudf, cupy  # noqa: E402
 
 
 @pytest.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])
 def axis(request):
     return request.param
-
-
-@pytest.fixture(params=[1_000, 100_000, 10_000_000])
-def rangeindex(request):
-    """Create a cudf RangeIndex of different size `nrows`"""
-    return cudf.RangeIndex(range(request.param))
 
 
 def pytest_sessionstart(session):
@@ -134,7 +108,7 @@ def collapse_fixtures(fixtures, pattern, repl, new_fixtures, used):
             used |= OrderedSet(group)
 
             if name not in new_fixtures:
-                fixture_union(name=name, fixtures=group)
+                pytest_cases.fixture_union(name=name, fixtures=group)
                 new_fixtures.add(name)
 
 
@@ -246,7 +220,7 @@ for dtype, column_generator in column_generators.items():
     # Create the combined dataframe fixtures for different numbers of columns.
     for nulls in ["false", "true"]:
         name = f"dataframe_dtype_{dtype}_nulls_{nulls}"
-        fixture_union(
+        pytest_cases.fixture_union(
             name=name,
             fixtures=[
                 f"dataframe_dtype_{dtype}_nulls_{nulls}_cols_{nc}" for nc in num_cols
@@ -290,22 +264,19 @@ for dtype, column_generator in column_generators.items():
     # We have to manually add this one because we aren't including nullable
     # indexes but we want to be able to run some benchmarks on Series/DataFrame
     # that may or may not be nullable as well as Index objects.
-    fixture_union(
+    pytest_cases.fixture_union(
         name=f"frame_or_index_dtype_{dtype}",
         fixtures=(f"indexedframe_dtype_{dtype}", f"index_dtype_{dtype}_nulls_false"),
     )
 
 
 # TODO: Figure out how to incorporate RangeIndex and MultiIndex fixtures.
-def range_index(request):
+@pytest_cases.fixture(params=num_rows)
+def rangeindex(request):
     return cudf.RangeIndex(request.param)
 
 
-name = "range_index"
-globals()[name] = pytest_cases.fixture(name=name, params=num_rows)(range_index)
-
-
-# fixture_union(name="generic_index", fixtures=("int64_index",))
+# pytest_cases.fixture_union(name="generic_index", fixtures=("int64_index",))
 #
 # # TODO: Add MultiIndex, also of different dtypes...
-# fixture_union(name="index", fixtures=("generic_index", "range_index"))
+# pytest_cases.fixture_union(name="index", fixtures=("generic_index", "range_index"))
