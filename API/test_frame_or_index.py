@@ -1,5 +1,6 @@
 """Benchmarks of methods that exist for both Frame and BaseIndex."""
 
+import numpy as np
 import pytest
 from utils import make_gather_map
 
@@ -51,3 +52,8 @@ def test_to_arrow(benchmark, frame_or_index_dtype_int):
 
 def test_astype(benchmark, frame_or_index_dtype_int):
     benchmark(frame_or_index_dtype_int.astype, float)
+
+
+@pytest.mark.parametrize("ufunc", [np.add, np.logical_and, np.bitwise_and])
+def test_ufunc_series_binary(benchmark, frame_or_index_dtype_int, ufunc):
+    benchmark(ufunc, frame_or_index_dtype_int, frame_or_index_dtype_int)
