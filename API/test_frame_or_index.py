@@ -1,5 +1,7 @@
 """Benchmarks of methods that exist for both Frame and BaseIndex."""
 
+import operator
+
 import numpy as np
 import pytest
 from utils import make_gather_map
@@ -57,3 +59,12 @@ def test_astype(benchmark, frame_or_index_dtype_int):
 @pytest.mark.parametrize("ufunc", [np.add, np.logical_and, np.bitwise_and])
 def test_ufunc_series_binary(benchmark, frame_or_index_dtype_int, ufunc):
     benchmark(ufunc, frame_or_index_dtype_int, frame_or_index_dtype_int)
+
+
+@pytest.mark.parametrize(
+    "op",
+    [operator.add, operator.mul, operator.__and__, operator.eq],
+)
+def test_binops(benchmark, op, frame_or_index_dtype_int):
+    # Use integer data so that __and__ is well-defined.
+    benchmark(lambda: op(frame_or_index_dtype_int, frame_or_index_dtype_int))
