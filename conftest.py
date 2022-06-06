@@ -161,6 +161,11 @@ class OrderedSet(MutableSet):
     def __len__(self):
         return len(self._data)
 
+    def __repr__(self):
+        # Helpful for debugging.
+        data = ", ".join(str(i) for i in self._data)
+        return f"{self.__class__.__name__}({data})"
+
     def add(self, value):
         self._data[value] = None
 
@@ -174,11 +179,11 @@ class OrderedSet(MutableSet):
 # A dictionary of callables that create a column of a specified length
 column_generators = {
     "int": cupy.arange,
-    # "float": (lambda nr: cupy.arange(nr, dtype=float)),
+    "float": (lambda nr: cupy.arange(nr, dtype=float)),
 }
 
 num_rows = [10]
-num_cols = [1]
+num_cols = [1, 6]
 fixtures = {0: OrderedSet()}
 make_fixture_level_0 = partial(make_fixture, new_fixtures=fixtures[0], params=num_rows)
 
