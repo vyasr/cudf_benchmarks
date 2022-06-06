@@ -91,3 +91,16 @@ def test_groupby_agg(
         ).agg,
         agg,
     )
+
+
+@pytest.mark.parametrize("ncol_sort", [1])
+def test_sort_values(benchmark, dataframe_dtype_int, ncol_sort):
+    by = list(dataframe_dtype_int.columns[:ncol_sort])
+    benchmark(dataframe_dtype_int.sort_values, by)
+
+
+@pytest.mark.parametrize("ncol_sort", [1])
+@pytest.mark.parametrize("n", [10])
+def test_nsmallest(benchmark, dataframe_dtype_int, ncol_sort, n):
+    by = list(dataframe_dtype_int.columns[:ncol_sort])
+    benchmark(dataframe_dtype_int.nsmallest, n, by)
