@@ -185,7 +185,7 @@ column_generators = {
 }
 
 # TODO: Move constants into config.py so that they're accessible.
-num_rows = [1000000]
+num_rows = [10]
 num_cols = [1, 6]
 fixtures = {0: OrderedSet()}
 

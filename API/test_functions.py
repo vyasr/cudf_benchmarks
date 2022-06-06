@@ -1,8 +1,7 @@
 """Benchmarks of free functions that accept cudf objects."""
 
 import pytest
-from config import cudf
-from config import cupy as cp
+from config import cudf, cupy
 
 
 @pytest.mark.parametrize(
@@ -122,7 +121,7 @@ def test_concat_axis_1(benchmark, objs, axis, join, ignore_index):
 
 @pytest.mark.parametrize("size", [10_000, 100_000])
 @pytest.mark.parametrize("cardinality", [10, 100, 1000])
-@pytest.mark.parametrize("dtype", [cp.bool_, cp.float64])
+@pytest.mark.parametrize("dtype", [cupy.bool_, cupy.float64])
 def test_get_dummies_high_cardinality(benchmark, size, cardinality, dtype):
     """This test is mean to test the performance of get_dummies given the
     cardinality of column to encode is high.
@@ -130,7 +129,7 @@ def test_get_dummies_high_cardinality(benchmark, size, cardinality, dtype):
     df = cudf.DataFrame(
         {
             "col": cudf.Series(
-                cp.random.randint(low=0, high=cardinality, size=size)
+                cupy.random.randint(low=0, high=cardinality, size=size)
             ).astype("category")
         }
     )

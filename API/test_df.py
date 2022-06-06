@@ -4,10 +4,15 @@ import numpy
 import pytest
 from config import cudf, cupy
 
-exprs = ["a+b", "a+b+c+d+e", "a / (sin(a) + cos(b)) * tan(d*e*f)"]
+
+@pytest.mark.parametrize("N", [100, 1_000_000])
+def test_construction(benchmark, N):
+    benchmark(cudf.DataFrame, {None: cupy.random.rand(N)})
 
 
-@pytest.mark.parametrize("expr", exprs)
+@pytest.mark.parametrize(
+    "expr", ["a+b", "a+b+c+d+e", "a / (sin(a) + cos(b)) * tan(d*e*f)"]
+)
 def test_eval_func(benchmark, expr, dataframe_dtype_float_cols_6):
     benchmark(dataframe_dtype_float_cols_6.eval, expr)
 
