@@ -7,8 +7,13 @@ import os
 
 # Environment variable-based configuration of benchmarking pandas or cudf.
 if "CUDF_BENCHMARKS_USE_PANDAS" in os.environ:
-    import pandas as cudf
     import numpy as cupy
+    import pandas as cudf
 else:
-    import cudf  # noqa: W0611
-    import cupy  # noqa: W0611
+    import cudf  # noqa: W0611, F401
+    import cupy  # noqa: W0611, F401
+
+
+# Constants used to define benchmarking standards.
+NUM_ROWS = [10]  # The column lengths to use for benchmarked objects
+NUM_COLS = [1, 6]  # The numbers of columns to use for benchmarked DataFrames

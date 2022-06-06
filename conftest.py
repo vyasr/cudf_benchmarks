@@ -1,3 +1,48 @@
+"""Standard location for shared fixtures and code across tests.
+
+Most fixtures defined in this file represent one of the primary classes in the
+cuDF ecosystem such as DataFrame, Series, or Index. These fixtures may in turn
+be broken up into two categories: base fixtures and fixture unions. Each base
+fixture represents a specific type of object as well as certain of its
+properties crucial for benchmarking. Specifically, fixtures must account for
+the following different parameters:
+    - Class of object (DataFrame, Series, Index)
+    - Dtype
+    - Nullability
+    - Size (rows for all, rows/columns for DataFrame)
+
+One such fixture is a series of nullable integer data. Given that we generally
+want data across different sizes, we parametrize all fixtures across different
+numbers of rows rather than generating separate fixtures for each different
+possible number of rows. The number of columns is only relevant for DataFrame.
+
+While this core set of fixtures means that any benchmark can be run for any
+combination of these parameters, it also means that we would effectively have
+to parametrize our benchmarks with many fixtures. Not only is parametrizing
+tests with fixtures in this manner unsupported by pytest, it is also an
+inelegant solution leading to cumbersome parameter lists that must be
+maintained across all tests. Instead we make use of the
+`pytest_cases <https://smarie.github.io/python-pytest-cases/>_` pytest plugin,
+which supports the creation of fixture unions: fixtures that result from
+combining other fixtures together. The result is a set of well-defined fixtures
+that allow us to write benchmarks that naturally express the set of objects for
+which they are valid, e.g. `def bench_sort_values(frame_or_index)`.
+
+The generated fixtures are named according to the following convention:
+`classname_dtype_{dtype}[_nulls_{true|false}][_cols_{num_cols}]`
+where classname is one of the following: index, series, dataframe, indexedframe,
+frame, frame_or_index. Note that in the case of
+indexes, to match Series/DataFrame we simply set `classname=index` and rely on
+the `dtype_{dtype}` component to delineate which index class is actually in use.
+
+In addition to the above fixtures, we also provide the following more specialized
+fixtures:
+    - rangeindex: Since RangeIndex always holds int64 data we cannot conflate
+      it with index_dtype_int64 (a true Int64Index), and it cannot hold nulls.
+      As a result, it is provided as a separate fixture.
+"""
+
+
 import os
 import re
 import string
@@ -6,80 +51,35 @@ from collections.abc import MutableSet
 from functools import partial
 from itertools import groupby
 
-import pytest
 import pytest_cases
 
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
-from common.config import cudf, cupy  # noqa: E402
-
-
-@pytest.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])
-def axis(request):
-    return request.param
+from common.config import NUM_COLS, NUM_ROWS, cudf, cupy  # noqa: E402
 
 
 def pytest_sessionstart(session):
+    """Add the common files to the path for all tests to import."""
     sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
 
 def pytest_sessionfinish(session, exitstatus):
+    """Clean up sys.path after exit."""
     if "common" in sys.path[0]:
         del sys.path[0]
 
 
-"""
-New fixture logic.
-
-We dynamically generate fixtures to cover the most common matrix of objects required
-throughout benchmarking of cuDF. Specifically, we need to account for the following
-different parameters:
-    - Class of object (DataFrame, Series, Index)
-    - Dtype
-    - Nullability
-    - Size (rows for Series/Index, rows/columns for DataFrame)
-
-We make one assumption, which is that all benchmarks should be tested for data
-with all different possible numbers of rows, so that level of granularity is
-not exposed in the fixtures but is instead parametrized. For DataFrames, we do
-provide specific fixtures for different numbers of columns since not all
-benchmarks need to be run for data with different numbers of columns but could
-instead use a single fixed number and only vary the rows.
-
-Each element of this matrix is constructed as a separate fixture. We employ
-the standard naming scheme
-`classname_dtype_{dtype}_nulls_{true|false}[_cols_{num_cols}]`
-where classname is a lowercased version of the classname. Note that in the case of
-indexes, to match Series/DataFrame we simply set `classname=index` and rely on
-the `dtype_{dtype}` component to delineate which index class is actually in use.
-The `num_cols` component of the name is only used for dataframes.
-
-In addition to the above fixtures, we also provide the following more specialized
-fixtures:
-    - rangeindex: Since RangeIndex always holds int64 data we cannot conflate
-      it with index_dtype_int64 (a true Int64Index), and it cannot hold nulls.
-      As a result, it is provided as a separate fixture.
-    - multiindex: MultiIndex does not support nulls
-
-We then provide a large collection of fixture unions that combine the above fixtures.
-In general, these unions collapse along the three possible dimensions above:
-    - classname: Unions by class result in fixtures that will iterate over
-      multiple types. These unions typically map to actual classes within cuDF,
-      for instance unioning `series*` and `dataframe*` results in `indexedframe*` fixtures.
-    - dtype: Collapsing along dtype is only done for specific combinations that
-      we expect to be useful. Since we don't generally have a use case for a fixture that
-      encompasses _all_ dtypes, these collapses take the form e.g. `dtype_{int_or_float}`
-    - nulls: Collapsing along nulls results in fixtures with this component of
-      the name dropped, e.g. union(`series_nulls_true`, `series_nulls_false`) ->
-      `series`.
-"""
+@pytest_cases.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])
+def axis(request):
+    return request.param
 
 
 def make_fixture(name, func, new_fixtures, **kwargs):
     """Create a named fixture and inject it into the global namespace.
 
     https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
-    explains why this hack is necessary.
+    explains why this hack is necessary. Essentially, dynamically generated
+    fixtures must exist in globals() to be found by pytest.
     """
     globals()[name] = pytest_cases.fixture(name=name, **kwargs)(func)
     new_fixtures.add(name)
@@ -151,16 +151,11 @@ class OrderedSet(MutableSet):
 
 
 # A dictionary of callables that create a column of a specified length
-# TODO: Use a random state instead of global seeding.
-cupy.random.seed(0)
+random_state = cupy.random.RandomState(42)
 column_generators = {
-    "int": (lambda nr: cupy.random.randint(low=0, high=100, size=nr)),
-    "float": (lambda nr: cupy.random.rand(nr)),
+    "int": (lambda nr: random_state.randint(low=0, high=100, size=nr)),
+    "float": (lambda nr: random_state.rand(nr)),
 }
-
-# TODO: Move constants into config.py so that they're accessible.
-num_rows = [10]
-num_cols = [1, 6]
 fixtures = {0: OrderedSet()}
 
 # TODO: We need to decide whether making the number of rows part of the fixture
@@ -168,7 +163,7 @@ fixtures = {0: OrderedSet()}
 # possible that some benchmarks will need to prevent using too large a frame
 # (or will need a larger one), but the downside then is that we'll need to
 # update fixture names in all tests if we change the number of rows.
-make_fixture_level_0 = partial(make_fixture, new_fixtures=fixtures[0], params=num_rows)
+make_fixture_level_0 = partial(make_fixture, new_fixtures=fixtures[0], params=NUM_ROWS)
 
 # First generate all the base fixtures.
 for dtype, column_generator in column_generators.items():
@@ -194,11 +189,11 @@ for dtype, column_generator in column_generators.items():
             {f"{string.ascii_lowercase[i]}": column_generator(nr) for i in range(nc)}
         )
 
-    for nc in num_cols:
-        # TODO: pytest_cases seems to have a bug where the first argument
-        # being a kwarg (nr=nr, nc=nc) raises errors. I'll need to track
-        # that upstream, but for now that's no longer an issue since I'm
-        # passing request as a positional parameter.
+    for nc in NUM_COLS:
+        # TODO: pytest_cases seems to have a bug where the first argument being
+        # a kwarg (nr=nr, nc=nc) raises errors. I'll need to track that
+        # upstream, but for now that's no longer an issue since I'm passing
+        # request as a positional parameter.
         def dataframe_nulls_false(request, nc=nc, make_dataframe=make_dataframe):
             return make_dataframe(request.param, nc)
 
@@ -223,7 +218,7 @@ for dtype, column_generator in column_generators.items():
         pytest_cases.fixture_union(
             name=name,
             fixtures=[
-                f"dataframe_dtype_{dtype}_nulls_{nulls}_cols_{nc}" for nc in num_cols
+                f"dataframe_dtype_{dtype}_nulls_{nulls}_cols_{nc}" for nc in NUM_COLS
             ],
         )
         fixtures[0].add(name)
@@ -260,6 +255,7 @@ while fixtures[cur_level]:
     # collapsed, so we need to reconsider those in the next stage.
     prev_fixtures = fixtures[cur_level] | (fixtures[cur_level - 1] - used)
 
+
 for dtype, column_generator in column_generators.items():
     # We have to manually add this one because we aren't including nullable
     # indexes but we want to be able to run some benchmarks on Series/DataFrame
@@ -270,13 +266,7 @@ for dtype, column_generator in column_generators.items():
     )
 
 
-# TODO: Figure out how to incorporate RangeIndex and MultiIndex fixtures.
-@pytest_cases.fixture(params=num_rows)
+# TODO: Decide where to incorporate RangeIndex and MultiIndex fixtures.
+@pytest_cases.fixture(params=NUM_ROWS)
 def rangeindex(request):
     return cudf.RangeIndex(request.param)
-
-
-# pytest_cases.fixture_union(name="generic_index", fixtures=("int64_index",))
-#
-# # TODO: Add MultiIndex, also of different dtypes...
-# pytest_cases.fixture_union(name="index", fixtures=("generic_index", "range_index"))
