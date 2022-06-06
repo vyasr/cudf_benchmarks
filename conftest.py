@@ -188,6 +188,12 @@ column_generators = {
 num_rows = [1000000]
 num_cols = [1, 6]
 fixtures = {0: OrderedSet()}
+
+# TODO: We need to decide whether making the number of rows part of the fixture
+# parametrization makes sense, or if we need those separated as well. It's
+# possible that some benchmarks will need to prevent using too large a frame
+# (or will need a larger one), but the downside then is that we'll need to
+# update fixture names in all tests if we change the number of rows.
 make_fixture_level_0 = partial(make_fixture, new_fixtures=fixtures[0], params=num_rows)
 
 # First generate all the base fixtures.
