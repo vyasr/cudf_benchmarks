@@ -184,6 +184,7 @@ column_generators = {
     "float": (lambda nr: cupy.random.rand(nr)),
 }
 
+# TODO: Move constants into config.py so that they're accessible.
 num_rows = [1000000]
 num_cols = [1, 6]
 fixtures = {0: OrderedSet()}
