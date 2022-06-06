@@ -1,5 +1,5 @@
-from config import cudf
 import pytest
+from config import cudf
 
 
 @pytest.mark.parametrize(
@@ -105,10 +105,13 @@ import pytest
         ],
     ],
 )
-@pytest.mark.parametrize("axis", [1,])
+@pytest.mark.parametrize(
+    "axis",
+    [
+        1,
+    ],
+)
 @pytest.mark.parametrize("join", ["inner", "outer"])
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_concat_axis_1(benchmark, objs, axis, join, ignore_index):
-    benchmark(
-        cudf.concat, objs=objs, axis=axis, join=join, ignore_index=ignore_index
-    )
+    benchmark(cudf.concat, objs=objs, axis=axis, join=join, ignore_index=ignore_index)
