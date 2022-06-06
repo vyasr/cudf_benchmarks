@@ -177,12 +177,14 @@ class OrderedSet(MutableSet):
 
 
 # A dictionary of callables that create a column of a specified length
+# TODO: Use a random state instead of global seeding.
+cupy.random.seed(0)
 column_generators = {
-    "int": cupy.arange,
-    "float": (lambda nr: cupy.arange(nr, dtype=float)),
+    "int": (lambda nr: cupy.random.randint(low=0, high=100, size=nr)),
+    "float": (lambda nr: cupy.random.rand(nr)),
 }
 
-num_rows = [10]
+num_rows = [1000000]
 num_cols = [1, 6]
 fixtures = {0: OrderedSet()}
 make_fixture_level_0 = partial(make_fixture, new_fixtures=fixtures[0], params=num_rows)
@@ -216,7 +218,7 @@ for dtype, column_generator in column_generators.items():
         # being a kwarg (nr=nr, nc=nc) raises errors. I'll need to track
         # that upstream, but for now that's no longer an issue since I'm
         # passing request as a positional parameter.
-        def dataframe_nulls_false(request, nc=nc):
+        def dataframe_nulls_false(request, nc=nc, make_dataframe=make_dataframe):
             return make_dataframe(request.param, nc)
 
         make_fixture_level_0(
@@ -224,7 +226,7 @@ for dtype, column_generator in column_generators.items():
             dataframe_nulls_false,
         )
 
-        def dataframe_nulls_true(request, nc=nc):
+        def dataframe_nulls_true(request, nc=nc, make_dataframe=make_dataframe):
             df = make_dataframe(request.param, nc)
             df.iloc[::2, :] = None
             return df
