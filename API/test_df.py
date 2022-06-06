@@ -17,10 +17,11 @@ def test_eval_func(benchmark, expr, dataframe_dtype_float_cols_6):
     [2, 3, 4],
 )
 def test_merge(benchmark, dataframe_dtype_int_nulls_false_cols_6, nkey_cols):
+    on = list(dataframe_dtype_int_nulls_false_cols_6.columns[:nkey_cols])
     benchmark(
         dataframe_dtype_int_nulls_false_cols_6.merge,
         dataframe_dtype_int_nulls_false_cols_6,
-        on=[f"{string.ascii_lowercase[i]}" for i in range(nkey_cols)],
+        on=on,
     )
 
 
@@ -54,4 +55,39 @@ def test_sample(benchmark, dataframe_dtype_int, axis, frac, random_state):
         pytest.skip("Unsupported params.")
     benchmark(
         dataframe_dtype_int.sample, frac=frac, axis=axis, random_state=random_state
+    )
+
+
+@pytest.mark.parametrize(
+    "nkey_cols",
+    [2, 3, 4],
+)
+def test_groupby(benchmark, dataframe_dtype_int_nulls_false_cols_6, nkey_cols):
+    by = list(dataframe_dtype_int_nulls_false_cols_6.columns[:nkey_cols])
+    benchmark(dataframe_dtype_int_nulls_false_cols_6.groupby, by=by)
+
+
+@pytest.mark.parametrize(
+    "agg",
+    [
+        "sum",
+        ["sum", "mean"],
+        {f"{string.ascii_lowercase[i]}": ["sum", "mean", "count"] for i in range(6)},
+    ],
+)
+@pytest.mark.parametrize(
+    "nkey_cols",
+    [2, 3, 4],
+)
+@pytest.mark.parametrize("as_index", [True, False])
+@pytest.mark.parametrize("sort", [True, False])
+def test_groupby_agg(
+    benchmark, dataframe_dtype_int_nulls_false_cols_6, agg, nkey_cols, as_index, sort
+):
+    by = list(dataframe_dtype_int_nulls_false_cols_6.columns[:nkey_cols])
+    benchmark(
+        dataframe_dtype_int_nulls_false_cols_6.groupby(
+            by=by, as_index=as_index, sort=sort
+        ).agg,
+        agg,
     )
