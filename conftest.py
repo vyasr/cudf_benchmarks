@@ -85,7 +85,24 @@ def make_fixture(name, func, new_fixtures, **kwargs):
     new_fixtures.add(name)
 
 
-def collapse_fixtures(fixtures, pattern, repl, new_fixtures, used):
+def l1_id(val):
+    return val.alternative_name
+
+
+def default_id(val):
+    """A default index used to disambiguate tests.
+
+    Although we explicitly construct fixtures in such a way as to guarantee
+    that duplicates will not be present, pytest does not know this. At each
+    level of fixture unions, pytest requires that a unique name be defined for
+    each member, otherwise it assigns an id by default to avoid collisions.
+    Rather than leaving a raw id in place, we prefix it by 'alt' for easier
+    identification across all tests.
+    """
+    return f"alt{val.get_alternative_idx()}"
+
+
+def collapse_fixtures(fixtures, pattern, repl, new_fixtures, used, idfunc):
     """Create unions of fixtures based on specific name mappings.
 
     `fixtures` are grouped into unions according the regex replacement
@@ -108,7 +125,7 @@ def collapse_fixtures(fixtures, pattern, repl, new_fixtures, used):
             used |= OrderedSet(group)
 
             if name not in new_fixtures:
-                pytest_cases.fixture_union(name=name, fixtures=group)
+                pytest_cases.fixture_union(name=name, fixtures=group, ids=idfunc)
                 new_fixtures.add(name)
 
 
@@ -220,6 +237,7 @@ for dtype, column_generator in column_generators.items():
             fixtures=[
                 f"dataframe_dtype_{dtype}_nulls_{nulls}_cols_{nc}" for nc in NUM_COLS
             ],
+            ids=[f"cols_{nc}" for nc in NUM_COLS],
         )
         fixtures[0].add(name)
 
@@ -244,13 +262,10 @@ while fixtures[cur_level]:
         ("series|dataframe", "indexedframe"),
         ("indexedframe|index", "frame_or_index"),
     ]:
-        collapse_fixtures(
-            prev_fixtures,
-            pat,
-            repl,
-            fixtures[cur_level],
-            used,
-        )
+
+        idfunc = default_id if cur_level > 1 else l1_id
+        collapse_fixtures(prev_fixtures, pat, repl, fixtures[cur_level], used, idfunc)
+
     # Anything that wasn't added to any of the unions is effectively already
     # collapsed, so we need to reconsider those in the next stage.
     prev_fixtures = fixtures[cur_level] | (fixtures[cur_level - 1] - used)
@@ -263,6 +278,7 @@ for dtype, column_generator in column_generators.items():
     pytest_cases.fixture_union(
         name=f"frame_or_index_dtype_{dtype}",
         fixtures=(f"indexedframe_dtype_{dtype}", f"index_dtype_{dtype}_nulls_false"),
+        ids=["", f"index_dtype_{dtype}_nulls_false"],
     )
 
 
