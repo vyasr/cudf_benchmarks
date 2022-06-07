@@ -1,7 +1,7 @@
-from config import cudf
 import numpy as np
 import pandas as pd
 import pytest
+from config import cudf
 
 
 @pytest.fixture
@@ -17,17 +17,17 @@ def midx(pidx):
     return cudf.MultiIndex.from_pandas(pidx)
 
 
-def test_from_pandas(benchmark, pidx):
+def bench_from_pandas(benchmark, pidx):
     benchmark(cudf.MultiIndex.from_pandas, pidx)
 
 
-def test_constructor(benchmark, pidx):
+def bench_constructor(benchmark, pidx):
     benchmark(cudf.MultiIndex, codes=pidx.codes, levels=pidx.levels, names=pidx.names)
 
 
-def test_from_frame(benchmark, pidx):
+def bench_from_frame(benchmark, pidx):
     benchmark(cudf.MultiIndex.from_frame, pidx.to_frame(index=False))
 
 
-def test_copy(benchmark, midx):
+def bench_copy(benchmark, midx):
     benchmark(midx.copy, deep=False)

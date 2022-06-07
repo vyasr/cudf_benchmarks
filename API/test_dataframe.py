@@ -6,14 +6,14 @@ from config import cudf, cupy
 
 
 @pytest.mark.parametrize("N", [100, 1_000_000])
-def test_construction(benchmark, N):
+def bench_construction(benchmark, N):
     benchmark(cudf.DataFrame, {None: cupy.random.rand(N)})
 
 
 @pytest.mark.parametrize(
     "expr", ["a+b", "a+b+c+d+e", "a / (sin(a) + cos(b)) * tan(d*e*f)"]
 )
-def test_eval_func(benchmark, expr, dataframe_dtype_float_cols_6):
+def bench_eval_func(benchmark, expr, dataframe_dtype_float_cols_6):
     benchmark(dataframe_dtype_float_cols_6.eval, expr)
 
 
@@ -21,7 +21,7 @@ def test_eval_func(benchmark, expr, dataframe_dtype_float_cols_6):
     "nkey_cols",
     [2, 3, 4],
 )
-def test_merge(benchmark, dataframe_dtype_int_nulls_false_cols_6, nkey_cols):
+def bench_merge(benchmark, dataframe_dtype_int_nulls_false_cols_6, nkey_cols):
     on = list(dataframe_dtype_int_nulls_false_cols_6.columns[:nkey_cols])
     benchmark(
         dataframe_dtype_int_nulls_false_cols_6.merge,
@@ -41,7 +41,7 @@ def test_merge(benchmark, dataframe_dtype_int_nulls_false_cols_6, nkey_cols):
         cudf.Series(range(1000)),
     ],
 )
-def test_isin(benchmark, dataframe_dtype_int, values):
+def bench_isin(benchmark, dataframe_dtype_int, values):
     benchmark(dataframe_dtype_int.isin, values)
 
 
@@ -55,7 +55,7 @@ def random_state(request):
 
 
 @pytest.mark.parametrize("frac", [0.5])
-def test_sample(benchmark, dataframe_dtype_int, axis, frac, random_state):
+def bench_sample(benchmark, dataframe_dtype_int, axis, frac, random_state):
     if axis == 1 and isinstance(random_state, cupy.random.RandomState):
         pytest.skip("Unsupported params.")
     benchmark(
@@ -67,7 +67,7 @@ def test_sample(benchmark, dataframe_dtype_int, axis, frac, random_state):
     "nkey_cols",
     [2, 3, 4],
 )
-def test_groupby(benchmark, dataframe_dtype_int_nulls_false_cols_6, nkey_cols):
+def bench_groupby(benchmark, dataframe_dtype_int_nulls_false_cols_6, nkey_cols):
     by = list(dataframe_dtype_int_nulls_false_cols_6.columns[:nkey_cols])
     benchmark(dataframe_dtype_int_nulls_false_cols_6.groupby, by=by)
 
@@ -86,7 +86,7 @@ def test_groupby(benchmark, dataframe_dtype_int_nulls_false_cols_6, nkey_cols):
 )
 @pytest.mark.parametrize("as_index", [True, False])
 @pytest.mark.parametrize("sort", [True, False])
-def test_groupby_agg(
+def bench_groupby_agg(
     benchmark, dataframe_dtype_int_nulls_false_cols_6, agg, nkey_cols, as_index, sort
 ):
     by = list(dataframe_dtype_int_nulls_false_cols_6.columns[:nkey_cols])
@@ -99,13 +99,13 @@ def test_groupby_agg(
 
 
 @pytest.mark.parametrize("ncol_sort", [1])
-def test_sort_values(benchmark, dataframe_dtype_int, ncol_sort):
+def bench_sort_values(benchmark, dataframe_dtype_int, ncol_sort):
     by = list(dataframe_dtype_int.columns[:ncol_sort])
     benchmark(dataframe_dtype_int.sort_values, by)
 
 
 @pytest.mark.parametrize("ncol_sort", [1])
 @pytest.mark.parametrize("n", [10])
-def test_nsmallest(benchmark, dataframe_dtype_int, ncol_sort, n):
+def bench_nsmallest(benchmark, dataframe_dtype_int, ncol_sort, n):
     by = list(dataframe_dtype_int.columns[:ncol_sort])
     benchmark(dataframe_dtype_int.nsmallest, n, by)

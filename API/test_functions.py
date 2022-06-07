@@ -116,14 +116,14 @@ from config import cudf, cupy
 )
 @pytest.mark.parametrize("join", ["inner", "outer"])
 @pytest.mark.parametrize("ignore_index", [True, False])
-def test_concat_axis_1(benchmark, objs, axis, join, ignore_index):
+def bench_concat_axis_1(benchmark, objs, axis, join, ignore_index):
     benchmark(cudf.concat, objs=objs, axis=axis, join=join, ignore_index=ignore_index)
 
 
 @pytest.mark.parametrize("size", [10_000, 100_000])
 @pytest.mark.parametrize("cardinality", [10, 100, 1000])
 @pytest.mark.parametrize("dtype", [cupy.bool_, cupy.float64])
-def test_get_dummies_high_cardinality(benchmark, size, cardinality, dtype):
+def bench_get_dummies_high_cardinality(benchmark, size, cardinality, dtype):
     """This test is mean to test the performance of get_dummies given the
     cardinality of column to encode is high.
     """
@@ -138,7 +138,7 @@ def test_get_dummies_high_cardinality(benchmark, size, cardinality, dtype):
 
 
 @pytest.mark.parametrize("prefix", [None, "pre"])
-def test_get_dummies_simple(benchmark, prefix):
+def bench_get_dummies_simple(benchmark, prefix):
     """This test provides a small input to get_dummies to test the efficiency
     of the API itself.
     """

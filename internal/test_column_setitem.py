@@ -1,5 +1,5 @@
-from config import cudf
 import pytest
+from config import cudf
 
 
 @pytest.fixture(params=[10000, 1000000])
@@ -65,5 +65,5 @@ def key_value(request, col):
 #           column (len(val) != len(key) & len == num_true)
 
 
-def test_column_setitem(benchmark, col, key_value):
+def bench_column_setitem(benchmark, col, key_value):
     benchmark(col.__setitem__, *key_value)
