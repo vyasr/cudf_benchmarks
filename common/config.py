@@ -14,6 +14,7 @@ else:
     import cupy  # noqa: W0611, F401
 
 
+# TODO: Choose real values here before merging.
 # Constants used to define benchmarking standards.
 NUM_ROWS = [10]  # The column lengths to use for benchmarked objects
 NUM_COLS = [1, 6]  # The numbers of columns to use for benchmarked DataFrames
