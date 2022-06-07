@@ -1,25 +1,7 @@
 from numbers import Real
 
-from config import cudf, cupy as cp
-
-
-def make_frame(ncols, nkey_cols, nrows, low=0, high=100):
-    rstate = cp.random.RandomState(seed=0)
-    nval_cols = ncols - nkey_cols
-    key_columns = {
-        f"key{i}": rstate.randint(low, high, nrows) for i in range(nkey_cols)
-    }
-    val_columns = {f"val{i}": rstate.rand(nrows) for i in range(nval_cols)}
-    return cudf.DataFrame({**key_columns, **val_columns})
-
-
-def make_col(nrows, has_nulls=True):
-    rstate = cp.random.RandomState(seed=0)
-    c = cudf.core.column.as_column(rstate.randn(nrows))
-    if has_nulls:
-        # The choice of null placement is arbitrary.
-        c[::2] = None
-    return c
+from config import cudf
+from config import cupy as cp
 
 
 def make_gather_map(len_gather_map: Real, len_column: Real, how: str):

@@ -53,6 +53,10 @@ from itertools import groupby
 
 import pytest_cases
 
+# TODO: Rather than doing this path hacking (including the sessionstart and
+# sessionfinish hooks), we could just make the benchmarks a (sub)package to
+# enable relative imports. A minor change to consider when these are ported
+# into the main repo.
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
 from common.config import NUM_COLS, NUM_ROWS, cudf, cupy  # noqa: E402
@@ -257,6 +261,10 @@ while fixtures[cur_level]:
     fixtures[cur_level] = OrderedSet()
 
     used = OrderedSet()
+    # Note: If we start also introducing unions across dtypes, most likely
+    # those will take the form `*int_and_float*` or similar since we won't want
+    # to union _all_ dtypes. In that case, the regexes will need to use
+    # suitable lookaheads etc to avoid infinite loops here.
     for pat, repl in [
         ("_nulls_(true|false)", ""),
         ("series|dataframe", "indexedframe"),
