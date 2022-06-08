@@ -21,6 +21,14 @@ NUM_ROWS = [10]  # The column lengths to use for benchmarked objects
 NUM_COLS = [1, 6]  # The numbers of columns to use for benchmarked DataFrames
 
 
+def flatten(xs):
+    for x in xs:
+        if not isinstance(x, str):
+            yield from x
+        else:
+            yield x
+
+
 def cudf_benchmark(cls, dtype="int", nulls=None, cols=None, name="obj"):
     if inspect.isclass(cls):
         cls = cls.__name__
@@ -41,12 +49,24 @@ def cudf_benchmark(cls, dtype="int", nulls=None, cols=None, name="obj"):
     fixture_name = f"{cls}{dtype_str}{null_str}{col_str}"
 
     def deco(func):
+        # Note: Marks must be applied _before_ the cudf_benchmark decorator.
+        # Extract all marks and apply them directly to the wrapped function
+        # except for parametrize. For parametrize, we also need to augment the
+        # signature and forward the parameters.
+        marks = func.pytestmark
+        mark_parameters = [m for m in marks if m.name == "parametrize"]
+
+        # Parameters may be specified as tuples, so we need to flatten.
+        parameters = list(flatten([m.args[0] for m in mark_parameters]))
+        param_string = ", ".join(parameters)
         src = f"""
-def wrapped(benchmark, {fixture_name}):
-    func(benchmark, {fixture_name})
+def wrapped(benchmark, {fixture_name}, {param_string}):
+    func(benchmark, {fixture_name}, {param_string})
 """
         globals_ = {"func": func}
         exec(src, globals_)
-        return globals_["wrapped"]
+        wrapped = globals_["wrapped"]
+        wrapped.pytestmark = marks
+        return wrapped
 
     return deco
