@@ -2,7 +2,7 @@ import string
 
 import numpy
 import pytest
-from config import cudf, cupy
+from config import cudf, cudf_benchmark, cupy
 
 
 @pytest.mark.parametrize("N", [100, 1_000_000])
@@ -109,3 +109,8 @@ def bench_sort_values(benchmark, dataframe_dtype_int, ncol_sort):
 def bench_nsmallest(benchmark, dataframe_dtype_int, ncol_sort, n):
     by = list(dataframe_dtype_int.columns[:ncol_sort])
     benchmark(dataframe_dtype_int.nsmallest, n, by)
+
+
+@cudf_benchmark(cls="dataframe", dtype="int", nulls=False, cols=6)
+def bench_eval_func2(benchmark, obj):
+    benchmark(obj.eval, "a+b")
