@@ -58,10 +58,11 @@ def cudf_benchmark(cls, dtype="int", nulls=None, cols=None, name="obj"):
 
         # Parameters may be specified as tuples, so we need to flatten.
         parameters = list(flatten([m.args[0] for m in mark_parameters]))
-        param_string = ", ".join(parameters)
+        params_string = ", ".join(f"{p}" for p in parameters)
+        passed_params_string = ", ".join(f"{p}={p}" for p in parameters)
         src = f"""
-def wrapped(benchmark, {fixture_name}, {param_string}):
-    func(benchmark, {fixture_name}, {param_string})
+def wrapped(benchmark, {fixture_name}, {params_string}):
+    func(benchmark, {passed_params_string}, {name}={fixture_name})
 """
         globals_ = {"func": func}
         exec(src, globals_)

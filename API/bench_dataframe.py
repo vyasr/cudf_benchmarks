@@ -111,7 +111,7 @@ def bench_nsmallest(benchmark, dataframe_dtype_int, ncol_sort, n):
     benchmark(dataframe_dtype_int.nsmallest, n, by)
 
 
-@cudf_benchmark(cls="dataframe", dtype="int", nulls=False, cols=6)
+@cudf_benchmark(cls="dataframe", dtype="int", cols=6)
 @pytest.mark.parametrize(
     "expr", ["a+b", "a+b+c+d+e", "a / (sin(a) + cos(b)) * tan(d*e*f)"]
 )
