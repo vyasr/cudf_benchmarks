@@ -1,7 +1,7 @@
 import inspect
 from numbers import Real
 
-from config import cudf
+from config import NUM_COLS, column_generators, cudf
 from config import cupy as cp
 
 
@@ -94,10 +94,26 @@ def cudf_benchmark(cls, dtype="int", nulls=None, cols=None, name=None):
     if inspect.isclass(cls):
         cls = cls.__name__
     cls = cls.lower()
+
+    # TODO: See if there's a better way to centralize this definition.
+    supported_classes = (
+        "series",
+        "index",
+        "dataframe",
+        "indexedframe",
+        "frame_or_index",
+    )
+    assert (
+        cls in supported_classes
+    ), f"cls {cls} is invalid, choose from {', '.join(c for c in supported_classes)}"
+
     name = name or cls
 
     if not isinstance(dtype, list):
         dtype = [dtype]
+    assert all(
+        dt in column_generators for dt in dtype
+    ), f"The only supported dtypes are {', '.join(dt for dt in column_generators)}"
     dtype_str = "_dtype_" + "_or_".join(dtype)
 
     null_str = ""
@@ -106,6 +122,10 @@ def cudf_benchmark(cls, dtype="int", nulls=None, cols=None, name=None):
 
     col_str = ""
     if cols is not None:
+        assert cols in NUM_COLS, (
+            f"You have requested a DataFrame with {cols} columns but fixtures "
+            f"only exist for the values {', '.join(c for c in NUM_COLS)}"
+        )
         col_str = f"_cols_{cols}"
 
     fixture_name = f"{cls}{dtype_str}{null_str}{col_str}"
