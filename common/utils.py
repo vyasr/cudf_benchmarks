@@ -43,7 +43,7 @@ def flatten(xs):
             yield x
 
 
-def cudf_benchmark(cls, dtype="int", nulls=None, cols=None, name=None):
+def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, name=None):
     """A convenience wrapper for using cudf's 'standard' fixtures.
 
     The standard fixture generation logic provides a plethora of useful
