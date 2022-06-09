@@ -53,13 +53,12 @@ def random_state(request):
     return rs if isinstance(rs, int) else rs(seed=42)
 
 
+@cudf_benchmark(cls="dataframe", dtype="int")
 @pytest.mark.parametrize("frac", [0.5])
-def bench_sample(benchmark, dataframe_dtype_int, axis, frac, random_state):
+def bench_sample(benchmark, dataframe, axis, frac, random_state):
     if axis == 1 and isinstance(random_state, cupy.random.RandomState):
         pytest.skip("Unsupported params.")
-    benchmark(
-        dataframe_dtype_int.sample, frac=frac, axis=axis, random_state=random_state
-    )
+    benchmark(dataframe.sample, frac=frac, axis=axis, random_state=random_state)
 
 
 @cudf_benchmark(cls="dataframe", dtype="int", nulls=False, cols=6)

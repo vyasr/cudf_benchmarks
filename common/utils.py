@@ -1,4 +1,5 @@
 import inspect
+import textwrap
 from numbers import Real
 
 from config import NUM_COLS, column_generators, cudf
@@ -131,25 +132,32 @@ def cudf_benchmark(cls, dtype="int", nulls=None, cols=None, name=None):
     fixture_name = f"{cls}{dtype_str}{null_str}{col_str}"
 
     def deco(func):
-        # Note: Marks must be applied _before_ the cudf_benchmark decorator.
-        # Extract all marks and apply them directly to the wrapped function
-        # except for parametrize. For parametrize, we also need to augment the
-        # signature and forward the parameters.
-        marks = func.pytestmark
-        mark_parameters = [m for m in marks if m.name == "parametrize"]
+        # Construct the signature of the wrapper function to mimic the wrapped
+        # function and use that signature to construct the list of arguments
+        # forwarded to the wrapped function.
+        parameters = inspect.signature(func).parameters
 
-        # Parameters may be specified as tuples, so we need to flatten.
-        parameters = list(flatten([m.args[0] for m in mark_parameters]))
-        params_string = ", ".join(f"{p}" for p in parameters)
-        passed_params_string = ", ".join(f"{p}={p}" for p in parameters)
-        src = f"""
-def wrapped(benchmark, {fixture_name}, {params_string}):
-    func(benchmark, {passed_params_string}, {name}={fixture_name})
-"""
+        # Note: This assumes that any benchmark using this fixture has at least
+        # two parameters, but that must be valid because they must be using
+        # both the pytest-benchmark `benchmark` fixture and the cudf object.
+        params_str = ", ".join(f"{p}" for p in parameters if p != name)
+        arg_str = ", ".join(f"{p}={p}" for p in parameters if p != name)
+
+        params_str += f", {fixture_name}"
+        arg_str += f", {name}={fixture_name}"
+
+        src = textwrap.dedent(
+            f"""
+            def wrapped({params_str}):
+                func({arg_str})
+            """
+        )
         globals_ = {"func": func}
         exec(src, globals_)
         wrapped = globals_["wrapped"]
-        wrapped.pytestmark = marks
+        # In case marks were applied to the wrapped function, copy them over.
+        if marks := getattr(func, "pytestmark", None):
+            wrapped.pytestmark = marks
         return wrapped
 
     return deco
