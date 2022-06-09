@@ -2,7 +2,8 @@ import string
 
 import numpy
 import pytest
-from config import cudf, cudf_benchmark, cupy
+from config import cudf, cupy
+from utils import cudf_benchmark
 
 
 @pytest.mark.parametrize("N", [100, 1_000_000])
@@ -115,5 +116,5 @@ def bench_nsmallest(benchmark, dataframe_dtype_int, ncol_sort, n):
 @pytest.mark.parametrize(
     "expr", ["a+b", "a+b+c+d+e", "a / (sin(a) + cos(b)) * tan(d*e*f)"]
 )
-def bench_eval_func2(benchmark, obj, expr):
-    benchmark(obj.eval, "a+b")
+def bench_eval_func2(benchmark, dataframe, expr):
+    benchmark(dataframe.eval, "a+b")
