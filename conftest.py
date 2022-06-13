@@ -58,16 +58,22 @@ import pytest_cases
 # into the main repo.
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
-from config import NUM_ROWS  # noqa: W0611, E402, F401
-from config import column_generators  # noqa: F401
-from config import cudf  # noqa: E402
-from config import (
+from config import cudf  # noqa: W0611, E402, F401
+
+# Turn off isort until we upgrade to 5.8.0
+# https://github.com/pycqa/isort/issues/1594
+# isort: off
+from config import (  # noqa: W0611, E402, F401
     NUM_COLS,
+    NUM_ROWS,
     collect_ignore,
+    column_generators,
     pytest_collection_modifyitems,
     pytest_sessionfinish,
     pytest_sessionstart,
 )
+
+# isort: on
 
 
 @pytest_cases.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])
