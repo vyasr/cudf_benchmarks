@@ -16,7 +16,7 @@ else:
 
 # TODO: Choose real values here before merging.
 # Constants used to define benchmarking standards.
-NUM_ROWS = [10]  # The column lengths to use for benchmarked objects
+NUM_ROWS = [10, 20]  # The column lengths to use for benchmarked objects
 NUM_COLS = [1, 6]  # The numbers of columns to use for benchmarked DataFrames
 
 # A dictionary of callables that create a column of a specified length

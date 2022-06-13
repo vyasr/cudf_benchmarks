@@ -2,7 +2,7 @@ import inspect
 import textwrap
 from numbers import Real
 
-from config import NUM_COLS, column_generators, cudf
+from config import NUM_COLS, NUM_ROWS, column_generators, cudf
 from config import cupy as cp
 
 
@@ -43,7 +43,7 @@ def flatten(xs):
             yield x
 
 
-def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, name=None):
+def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=None):
     """A convenience wrapper for using cudf's 'standard' fixtures.
 
     The standard fixture generation logic provides a plethora of useful
@@ -70,6 +70,9 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, name=None):
         The number of columns. Only valid if cls == 'dataframe'. If None, use
         all possible numbers of columns. Specifying multiple values is
         unsupported.
+    rows : Optional[int], None
+        The number of rows. If None, use all possible numbers of rows.
+        Specifying multiple values is unsupported.
     fixture : str, default None
         The name of the fixture as used in the decorated test. If None,
         defaults to `cls.lower()` if cls is a string, otherwise
@@ -126,7 +129,15 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, name=None):
         )
         col_str = f"_cols_{cols}"
 
-    fixture_name = f"{cls}{dtype_str}{null_str}{col_str}"
+    row_str = ""
+    if rows is not None:
+        assert rows in NUM_ROWS, (
+            f"You have requested a {cls} with {rows} rows but fixtures "
+            f"only exist for the values {', '.join(c for c in NUM_ROWS)}"
+        )
+        row_str = f"_rows_{rows}"
+
+    fixture_name = f"{cls}{dtype_str}{null_str}{col_str}{row_str}"
 
     def deco(bm):
         # pytests's test collection process relies on parsing the globals dict
