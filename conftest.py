@@ -59,7 +59,7 @@ import pytest_cases
 # into the main repo.
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
-from common.config import NUM_COLS, NUM_ROWS, cudf, cupy  # noqa: E402
+from config import NUM_COLS, NUM_ROWS, column_generators, cudf  # noqa: E402
 
 
 def pytest_sessionstart(session):
@@ -171,12 +171,6 @@ class OrderedSet(MutableSet):
         return OrderedSet(self._data)
 
 
-# A dictionary of callables that create a column of a specified length
-random_state = cupy.random.RandomState(42)
-column_generators = {
-    "int": (lambda nr: random_state.randint(low=0, high=100, size=nr)),
-    "float": (lambda nr: random_state.rand(nr)),
-}
 fixtures = {0: OrderedSet()}
 
 # TODO: We need to decide whether making the number of rows part of the fixture
