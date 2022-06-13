@@ -16,6 +16,7 @@ def bench_take(benchmark, gather_how, fraction, frame_or_index):
     benchmark(frame_or_index.take, gather_map)
 
 
+@pytest.mark.pandas_incompatible  # Series/Index work, but not DataFrame
 @cudf_benchmark(cls="frame_or_index", dtype="int")
 def bench_argsort(benchmark, frame_or_index):
     benchmark(frame_or_index.argsort)
@@ -33,6 +34,7 @@ def bench_where(benchmark, frame_or_index):
 
 
 @cudf_benchmark(cls="frame_or_index", dtype="int", nulls=False)
+@pytest.mark.pandas_incompatible
 def bench_values_host(benchmark, frame_or_index):
     benchmark(lambda: frame_or_index.values_host)
 
@@ -53,11 +55,13 @@ def bench_to_numpy(benchmark, frame_or_index):
 
 
 @cudf_benchmark(cls="frame_or_index", dtype="int", nulls=False)
+@pytest.mark.pandas_incompatible
 def bench_to_cupy(benchmark, frame_or_index):
     benchmark(frame_or_index.to_cupy)
 
 
 @cudf_benchmark(cls="frame_or_index", dtype="int")
+@pytest.mark.pandas_incompatible
 def bench_to_arrow(benchmark, frame_or_index):
     benchmark(frame_or_index.to_arrow)
 
@@ -67,7 +71,7 @@ def bench_astype(benchmark, frame_or_index):
     benchmark(frame_or_index.astype, float)
 
 
-@pytest.mark.parametrize("ufunc", [np.add, np.logical_and, np.bitwise_and])
+@pytest.mark.parametrize("ufunc", [np.add, np.logical_and])
 @cudf_benchmark(cls="frame_or_index", dtype="int")
 def bench_ufunc_series_binary(benchmark, frame_or_index, ufunc):
     benchmark(ufunc, frame_or_index, frame_or_index)
@@ -75,9 +79,8 @@ def bench_ufunc_series_binary(benchmark, frame_or_index, ufunc):
 
 @pytest.mark.parametrize(
     "op",
-    [operator.add, operator.mul, operator.__and__, operator.eq],
+    [operator.add, operator.mul, operator.eq],
 )
 @cudf_benchmark(cls="frame_or_index", dtype="int")
 def bench_binops(benchmark, op, frame_or_index):
-    # Use integer data so that __and__ is well-defined.
     benchmark(lambda: op(frame_or_index, frame_or_index))

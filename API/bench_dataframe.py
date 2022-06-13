@@ -13,7 +13,7 @@ def bench_construction(benchmark, N):
 
 @cudf_benchmark(cls="dataframe", dtype="float", cols=6)
 @pytest.mark.parametrize(
-    "expr", ["a+b", "a+b+c+d+e", "a / (sin(a) + cos(b)) * tan(d*e*f)"]
+    "expr", ["a+b", "a+b+c+d+e", "a / (sin(a) + cos(b)) * tanh(d*e*f)"]
 )
 def bench_eval_func(benchmark, expr, dataframe):
     benchmark(dataframe.eval, expr)
