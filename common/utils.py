@@ -70,7 +70,7 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, name=None):
         The number of columns. Only valid if cls == 'dataframe'. If None, use
         all possible numbers of columns. Specifying multiple values is
         unsupported.
-    fixture_name : str, default None
+    fixture : str, default None
         The name of the fixture as used in the decorated test. If None,
         defaults to `cls.lower()` if cls is a string, otherwise
         `cls.__name__.lower()`. Use of this name allows the decorated function
@@ -79,10 +79,8 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, name=None):
 
     Raises
     ------
-    ValueError
+    AssertionError
         If any of the parameters do not correspond to extant fixtures.
-    ValueError
-        If cols != None and cls != 'dataframe'
 
     Examples
     --------
@@ -96,7 +94,6 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, name=None):
         cls = cls.__name__
     cls = cls.lower()
 
-    # TODO: See if there's a better way to centralize this definition.
     supported_classes = (
         "series",
         "index",
@@ -131,15 +128,19 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, name=None):
 
     fixture_name = f"{cls}{dtype_str}{null_str}{col_str}"
 
-    def deco(func):
-        # Construct the signature of the wrapper function to mimic the wrapped
-        # function and use that signature to construct the list of arguments
-        # forwarded to the wrapped function.
-        parameters = inspect.signature(func).parameters
+    def deco(bm):
+        # pytests's test collection process relies on parsing the globals dict
+        # to find test functions and identify their parameters for the purpose
+        # of fixtures and parameters. Therefore, the primary purpose of this
+        # decorator is to define a new benchmark function with a signature
+        # identical to that of the decorated benchmark except with the user's
+        # fixture name replaced by the true fixture name based on the arguments
+        # to cudf_benchmark.
+        parameters = inspect.signature(bm).parameters
 
-        # Note: This assumes that any benchmark using this fixture has at least
-        # two parameters, but that must be valid because they must be using
-        # both the pytest-benchmark `benchmark` fixture and the cudf object.
+        # Note: This logic assumes that any benchmark using this fixture has at
+        # least two parameters since they must be using both the
+        # pytest-benchmark `benchmark` fixture and the cudf object.
         params_str = ", ".join(f"{p}" for p in parameters if p != name)
         arg_str = ", ".join(f"{p}={p}" for p in parameters if p != name)
 
@@ -148,16 +149,16 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, name=None):
 
         src = textwrap.dedent(
             f"""
-            def wrapped({params_str}):
-                func({arg_str})
+            def wrapped_bm({params_str}):
+                bm({arg_str})
             """
         )
-        globals_ = {"func": func}
+        globals_ = {"bm": bm}
         exec(src, globals_)
-        wrapped = globals_["wrapped"]
-        # In case marks were applied to the wrapped function, copy them over.
-        if marks := getattr(func, "pytestmark", None):
-            wrapped.pytestmark = marks
-        return wrapped
+        wrapped_bm = globals_["wrapped_bm"]
+        # In case marks were applied to the original benchmark, copy them over.
+        if marks := getattr(bm, "pytestmark", None):
+            wrapped_bm.pytestmark = marks
+        return wrapped_bm
 
     return deco
