@@ -58,18 +58,16 @@ import pytest_cases
 # into the main repo.
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
-from config import NUM_COLS, NUM_ROWS, column_generators, cudf  # noqa: E402
-
-
-def pytest_sessionstart(session):
-    """Add the common files to the path for all tests to import."""
-    sys.path.insert(0, os.path.join(os.getcwd(), "common"))
-
-
-def pytest_sessionfinish(session, exitstatus):
-    """Clean up sys.path after exit."""
-    if "common" in sys.path[0]:
-        del sys.path[0]
+from config import NUM_ROWS  # noqa: W0611, E402, F401
+from config import column_generators  # noqa: F401
+from config import cudf  # noqa: E402
+from config import (
+    NUM_COLS,
+    collect_ignore,
+    pytest_collection_modifyitems,
+    pytest_sessionfinish,
+    pytest_sessionstart,
+)
 
 
 @pytest_cases.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])

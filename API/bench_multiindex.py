@@ -14,19 +14,24 @@ def pidx():
 
 @pytest.fixture
 def midx(pidx):
-    return cudf.MultiIndex.from_pandas(pidx)
+    num_elements = int(1e3)
+    a = np.random.randint(0, num_elements // 10, num_elements)
+    b = np.random.randint(0, num_elements // 10, num_elements)
+    df = cudf.DataFrame({"a": a, "b": b})
+    return cudf.MultiIndex.from_frame(df)
 
 
+@pytest.mark.pandas_incompatible
 def bench_from_pandas(benchmark, pidx):
     benchmark(cudf.MultiIndex.from_pandas, pidx)
 
 
-def bench_constructor(benchmark, pidx):
-    benchmark(cudf.MultiIndex, codes=pidx.codes, levels=pidx.levels, names=pidx.names)
+def bench_constructor(benchmark, midx):
+    benchmark(cudf.MultiIndex, codes=midx.codes, levels=midx.levels, names=midx.names)
 
 
-def bench_from_frame(benchmark, pidx):
-    benchmark(cudf.MultiIndex.from_frame, pidx.to_frame(index=False))
+def bench_from_frame(benchmark, midx):
+    benchmark(cudf.MultiIndex.from_frame, midx.to_frame(index=False))
 
 
 def bench_copy(benchmark, midx):

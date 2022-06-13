@@ -21,13 +21,13 @@ def make_gather_map(len_gather_map: Real, len_column: Real, how: str):
 
     rstate = cp.random.RandomState(seed=0)
     if how == "sequence":
-        return cudf.Series(cp.arange(0, len_gather_map))._column
+        return cudf.Series(cp.arange(0, len_gather_map))
     elif how == "reverse":
         return cudf.Series(
             cp.arange(len_column - 1, len_column - len_gather_map - 1, -1)
-        )._column
+        )
     elif how == "random":
-        return cudf.Series(rstate.randint(0, len_column, len_gather_map))._column
+        return cudf.Series(rstate.randint(0, len_column, len_gather_map))
 
 
 def make_boolean_mask_column(size):
