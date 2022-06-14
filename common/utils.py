@@ -225,7 +225,7 @@ def make_fixture(name, func, globals_, fixtures):
     fixtures.add(name)
 
 
-def collapse_fixtures(fixtures, pattern, repl, new_fixtures, idfunc, globals_):
+def collapse_fixtures(fixtures, pattern, repl, idfunc, globals_):
     """Create unions of fixtures based on specific name mappings.
 
     `fixtures` are grouped into unions according the regex replacement
@@ -235,10 +235,12 @@ def collapse_fixtures(fixtures, pattern, repl, new_fixtures, idfunc, globals_):
     def collapser(n):
         return re.sub(pattern, repl, n)
 
+    # Note: sorted creates a new list, not a view, so it's OK to modify the
+    # list of fixtures while iterating over the sorted result.
     for name, group in groupby(sorted(fixtures, key=collapser), key=collapser):
         group = list(group)
-        if len(group) > 1:
-            if name not in fixtures | new_fixtures:
-                pytest_cases.fixture_union(name=name, fixtures=group, ids=idfunc)
-                globals_[name] = globals()[name]
-                new_fixtures.add(name)
+        if len(group) > 1 and name not in fixtures:
+            pytest_cases.fixture_union(name=name, fixtures=group, ids=idfunc)
+            # Need to assign back to the parent scope's globals.
+            globals_[name] = globals()[name]
+            fixtures.add(name)

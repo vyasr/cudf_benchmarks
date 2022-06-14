@@ -171,13 +171,11 @@ def default_id(val):
 
 # Label the first level differently from others since there's no redundancy.
 idfunc = l1_id
-# This is a temporary assignment to effect a do-while loop below. new_fixtures
-# really starts off empty.
-new_fixtures = fixtures
+num_new_fixtures = len(fixtures)
 
 # Keep trying to merge existing fixtures until no new fixtures are added.
-while new_fixtures:
-    new_fixtures = OrderedSet()
+while num_new_fixtures > 0:
+    num_fixtures = len(fixtures)
 
     # Note: If we start also introducing unions across dtypes, most likely
     # those will take the form `*int_and_float*` or similar since we won't want
@@ -191,9 +189,10 @@ while new_fixtures:
         (r"_cols_\d+", ""),
     ]:
 
-        collapse_fixtures(fixtures, pat, repl, new_fixtures, idfunc, globals())
+        collapse_fixtures(fixtures, pat, repl, idfunc, globals())
 
-    fixtures |= new_fixtures
+    num_new_fixtures = len(fixtures) - num_fixtures
+    # All subsequent levels get the same (collapsed) labels.
     idfunc = default_id
 
 
