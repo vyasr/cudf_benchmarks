@@ -3,7 +3,7 @@ from config import NUM_ROWS, cudf, cupy
 
 
 @pytest_cases.parametrize("nr", NUM_ROWS)
-def concat_case_1(nr):
+def concat_case_default_index(nr):
     return [
         cudf.DataFrame({"a": cupy.tile([1, 2, 3], nr)}),
         cudf.DataFrame({"b": cupy.tile([4, 5, 7], nr)}),
@@ -11,7 +11,7 @@ def concat_case_1(nr):
 
 
 @pytest_cases.parametrize("nr", NUM_ROWS)
-def concat_case_2(nr):
+def concat_case_contiguous_indexes(nr):
     return [
         cudf.DataFrame({"a": cupy.tile([1, 2, 3], nr)}),
         cudf.DataFrame(
@@ -22,7 +22,7 @@ def concat_case_2(nr):
 
 
 @pytest_cases.parametrize("nr", NUM_ROWS)
-def concat_case_3(nr):
+def concat_case_contiguous_indexes_different_cols(nr):
     return [
         cudf.DataFrame({"a": cupy.tile([1, 2, 3], nr), "b": cupy.tile([4, 5, 7], nr)}),
         cudf.DataFrame(
@@ -33,7 +33,7 @@ def concat_case_3(nr):
 
 
 @pytest_cases.parametrize("nr", NUM_ROWS)
-def concat_case_4(nr):
+def concat_case_string_index(nr):
     return [
         cudf.DataFrame(
             {"a": cupy.tile([1, 2, 3], nr), "b": cupy.tile([4, 5, 7], nr)},
@@ -47,7 +47,7 @@ def concat_case_4(nr):
 
 
 @pytest_cases.parametrize("nr", NUM_ROWS)
-def concat_case_5(nr):
+def concat_case_contiguous_string_index_different_col(nr):
     return [
         cudf.DataFrame(
             {"a": cupy.tile([1, 2, 3], nr), "b": cupy.tile([4, 5, 7], nr)},
@@ -61,7 +61,7 @@ def concat_case_5(nr):
 
 
 @pytest_cases.parametrize("nr", NUM_ROWS)
-def concat_case_6(nr):
+def concat_case_complex_string_index(nr):
     return [
         cudf.DataFrame(
             {"a": cupy.tile([1, 2, 3], nr), "b": cupy.tile([4, 5, 7], nr)},
@@ -91,7 +91,7 @@ def concat_case_6(nr):
 
 
 @pytest_cases.parametrize("nr", NUM_ROWS)
-def concat_case_7(nr):
+def concat_case_unique_columns(nr):
     # To avoid any edge case bugs, always use at least 10 rows per DataFrame.
     nr_actual = max(10, nr // 20)
     return [
@@ -109,7 +109,7 @@ def concat_case_7(nr):
 
 
 @pytest_cases.parametrize("nr", NUM_ROWS)
-def concat_case_8(nr):
+def concat_case_unique_columns_with_different_range_index(nr):
     return [
         cudf.DataFrame({"a": cupy.tile([1, 2, 3], nr), "b": cupy.tile([4, 5, 7], nr)}),
         cudf.DataFrame(
