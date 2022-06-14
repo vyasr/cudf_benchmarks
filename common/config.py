@@ -16,13 +16,14 @@ import os
 import sys
 
 # Environment variable-based configuration of benchmarking pandas or cudf.
+collect_ignore = []
 if "CUDF_BENCHMARKS_USE_PANDAS" in os.environ:
     import numpy as cupy
     import pandas as cudf
 
     # cudf internals offer no pandas compatibility guarantees, and we also
     # never need to compare those benchmarks to pandas.
-    collect_ignore = ["internal/"]
+    collect_ignore.append("internal/")
 
     # Also filter out benchmarks of APIs that are not compatible with pandas.
     def is_pandas_compatible(item):
@@ -34,8 +35,6 @@ if "CUDF_BENCHMARKS_USE_PANDAS" in os.environ:
 else:
     import cudf  # noqa: W0611, F401
     import cupy
-
-    collect_ignore = []
 
     def pytest_collection_modifyitems(session, config, items):
         pass
