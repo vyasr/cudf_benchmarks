@@ -5,7 +5,6 @@ import pytest_cases
 from config import cudf, cupy
 
 
-# TODO: These cases should be migrated to properly use pytest_cases.
 @pytest_cases.parametrize_with_cases("objs", prefix="concat")
 @pytest.mark.parametrize(
     "axis",
