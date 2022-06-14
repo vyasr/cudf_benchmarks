@@ -55,11 +55,6 @@ def pytest_sessionfinish(session, exitstatus):
 if "CUDF_BENCHMARKS_TEST_ONLY" in os.environ:
     NUM_ROWS = [10, 20]
     NUM_COLS = [1, 6]
-
-    # Some benchmarks aren't solely reliant on fixtures for size and become too
-    # unwieldy. In the long run we may want a custom mark like
-    # `pandas_incompatible` for more granular identification of such functions.
-    collect_ignore.append("API/bench_functions.py")
 else:
     NUM_ROWS = [100, 10_000, 1_000_000]
     NUM_COLS = [1, 6]
