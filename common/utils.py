@@ -1,6 +1,8 @@
 import inspect
+import re
 import textwrap
 from collections.abc import MutableSet
+from itertools import groupby
 from numbers import Real
 
 import pytest_cases
@@ -212,12 +214,31 @@ class OrderedSet(MutableSet):
         self._data.pop(value, None)
 
 
-def make_fixture(name, func, globals, fixtures):
-    """Create a named fixture in `globals` and save its name in `fixtures`.
+def make_fixture(name, func, globals_, fixtures):
+    """Create a named fixture in `globals_` and save its name in `fixtures`.
 
     https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
     explains why this hack is necessary. Essentially, dynamically generated
     fixtures must exist in globals() to be found by pytest.
     """
-    globals[name] = pytest_cases.fixture(name=name)(func)
+    globals_[name] = pytest_cases.fixture(name=name)(func)
     fixtures.add(name)
+
+
+def collapse_fixtures(fixtures, pattern, repl, new_fixtures, idfunc, globals_):
+    """Create unions of fixtures based on specific name mappings.
+
+    `fixtures` are grouped into unions according the regex replacement
+    `re.sub(pattern, repl)` and placed into `new_fixtures`.
+    """
+
+    def collapser(n):
+        return re.sub(pattern, repl, n)
+
+    for name, group in groupby(sorted(fixtures, key=collapser), key=collapser):
+        group = list(group)
+        if len(group) > 1:
+            if name not in fixtures | new_fixtures:
+                pytest_cases.fixture_union(name=name, fixtures=group, ids=idfunc)
+                globals_[name] = globals()[name]
+                new_fixtures.add(name)

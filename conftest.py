@@ -44,10 +44,8 @@ fixtures:
 
 
 import os
-import re
 import string
 import sys
-from itertools import groupby
 
 import pytest_cases
 
@@ -58,7 +56,7 @@ import pytest_cases
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
 from config import cudf  # noqa: W0611, E402, F401
-from utils import OrderedSet, make_fixture  # noqa: E402
+from utils import OrderedSet, collapse_fixtures, make_fixture  # noqa: E402
 
 # Turn off isort until we upgrade to 5.8.0
 # https://github.com/pycqa/isort/issues/1594
@@ -79,24 +77,6 @@ from config import (  # noqa: W0611, E402, F401
 @pytest_cases.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])
 def axis(request):
     return request.param
-
-
-def collapse_fixtures(fixtures, pattern, repl, new_fixtures, idfunc):
-    """Create unions of fixtures based on specific name mappings.
-
-    `fixtures` are grouped into unions according the regex replacement
-    `re.sub(pattern, repl)` and placed into `new_fixtures`.
-    """
-
-    def collapser(n):
-        return re.sub(pattern, repl, n)
-
-    for name, group in groupby(sorted(fixtures, key=collapser), key=collapser):
-        group = list(group)
-        if len(group) > 1:
-            if name not in fixtures | new_fixtures:
-                pytest_cases.fixture_union(name=name, fixtures=group, ids=idfunc)
-                new_fixtures.add(name)
 
 
 # First generate all the base fixtures.
@@ -211,7 +191,7 @@ while new_fixtures:
         (r"_cols_\d+", ""),
     ]:
 
-        collapse_fixtures(fixtures, pat, repl, new_fixtures, idfunc)
+        collapse_fixtures(fixtures, pat, repl, new_fixtures, idfunc, globals())
 
     fixtures |= new_fixtures
     idfunc = default_id
