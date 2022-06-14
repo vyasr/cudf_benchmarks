@@ -1,7 +1,9 @@
 import inspect
 import textwrap
+from collections.abc import MutableSet
 from numbers import Real
 
+import pytest_cases
 from config import NUM_COLS, NUM_ROWS, column_generators, cudf
 from config import cupy as cp
 
@@ -173,3 +175,49 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
         return wrapped_bm
 
     return deco
+
+
+class OrderedSet(MutableSet):
+    """A minimal OrderedSet implementation built on a dict.
+
+    This implementation exploits the fact that dicts are ordered as of Python
+    3.7. It is not intended to be performant, so only the minimal set of
+    methods are implemented. We need this class to ensure that fixture names
+    are constructed deterministically, otherwise pytest-xdist will complain if
+    different threads have seemingly different tests.
+    """
+
+    def __init__(self, args=None):
+        args = args or []
+        self._data = {value: None for value in args}
+
+    def __contains__(self, key):
+        return key in self._data
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+    def __repr__(self):
+        # Helpful for debugging.
+        data = ", ".join(str(i) for i in self._data)
+        return f"{self.__class__.__name__}({data})"
+
+    def add(self, value):
+        self._data[value] = None
+
+    def discard(self, value):
+        self._data.pop(value, None)
+
+
+def make_fixture(name, func, globals, fixtures):
+    """Create a named fixture in `globals` and save its name in `fixtures`.
+
+    https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
+    explains why this hack is necessary. Essentially, dynamically generated
+    fixtures must exist in globals() to be found by pytest.
+    """
+    globals[name] = pytest_cases.fixture(name=name)(func)
+    fixtures.add(name)

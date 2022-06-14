@@ -47,7 +47,6 @@ import os
 import re
 import string
 import sys
-from collections.abc import MutableSet
 from itertools import groupby
 
 import pytest_cases
@@ -59,6 +58,7 @@ import pytest_cases
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
 from config import cudf  # noqa: W0611, E402, F401
+from utils import OrderedSet, make_fixture  # noqa: E402
 
 # Turn off isort until we upgrade to 5.8.0
 # https://github.com/pycqa/isort/issues/1594
@@ -99,53 +99,6 @@ def collapse_fixtures(fixtures, pattern, repl, new_fixtures, idfunc):
                 new_fixtures.add(name)
 
 
-class OrderedSet(MutableSet):
-    """A minimal OrderedSet implementation built on a dict.
-
-    This implementation exploits the fact that dicts are ordered as of Python
-    3.7. It is not intended to be performant, so only the minimal set of
-    methods are implemented. We need this class to ensure that fixture names
-    are constructed deterministically, otherwise pytest-xdist will complain if
-    different threads have seemingly different tests.
-    """
-
-    def __init__(self, args=None):
-        args = args or []
-        self._data = {value: None for value in args}
-
-    def __contains__(self, key):
-        return key in self._data
-
-    def __iter__(self):
-        return iter(self._data)
-
-    def __len__(self):
-        return len(self._data)
-
-    def __repr__(self):
-        # Helpful for debugging.
-        data = ", ".join(str(i) for i in self._data)
-        return f"{self.__class__.__name__}({data})"
-
-    def add(self, value):
-        self._data[value] = None
-
-    def discard(self, value):
-        self._data.pop(value, None)
-
-
-def make_fixture(name, func):
-    """Create a named fixture and inject it into the global namespace.
-
-    https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
-    explains why this hack is necessary. Essentially, dynamically generated
-    fixtures must exist in globals() to be found by pytest.
-    """
-    globals()[name] = pytest_cases.fixture(name=name)(func)
-    global fixtures
-    fixtures.add(name)
-
-
 # First generate all the base fixtures.
 fixtures = OrderedSet()
 for dtype, column_generator in column_generators.items():
@@ -166,20 +119,35 @@ for dtype, column_generator in column_generators.items():
         def series_nulls_false(request, nr=nr, column_generator=column_generator):
             return cudf.Series(column_generator(nr))
 
-        make_fixture(f"series_dtype_{dtype}_nulls_false_rows_{nr}", series_nulls_false)
+        make_fixture(
+            f"series_dtype_{dtype}_nulls_false_rows_{nr}",
+            series_nulls_false,
+            globals(),
+            fixtures,
+        )
 
         def series_nulls_true(request, nr=nr, column_generator=column_generator):
             s = cudf.Series(column_generator(nr))
             s.iloc[::2] = None
             return s
 
-        make_fixture(f"series_dtype_{dtype}_nulls_true_rows_{nr}", series_nulls_true)
+        make_fixture(
+            f"series_dtype_{dtype}_nulls_true_rows_{nr}",
+            series_nulls_true,
+            globals(),
+            fixtures,
+        )
 
         # For now, not bothering to include a nullable index fixture.
         def index_nulls_false(request, nr=nr, column_generator=column_generator):
             return cudf.Index(column_generator(nr))
 
-        make_fixture(f"index_dtype_{dtype}_nulls_false_rows_{nr}", index_nulls_false)
+        make_fixture(
+            f"index_dtype_{dtype}_nulls_false_rows_{nr}",
+            index_nulls_false,
+            globals(),
+            fixtures,
+        )
 
         for nc in NUM_COLS:
 
@@ -191,6 +159,8 @@ for dtype, column_generator in column_generators.items():
             make_fixture(
                 f"dataframe_dtype_{dtype}_nulls_false_cols_{nc}_rows_{nr}",
                 dataframe_nulls_false,
+                globals(),
+                fixtures,
             )
 
             def dataframe_nulls_true(
@@ -203,6 +173,8 @@ for dtype, column_generator in column_generators.items():
             make_fixture(
                 f"dataframe_dtype_{dtype}_nulls_true_cols_{nc}_rows_{nr}",
                 dataframe_nulls_true,
+                globals(),
+                fixtures,
             )
 
 
