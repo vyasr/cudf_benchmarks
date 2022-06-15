@@ -1,20 +1,47 @@
-import itertools
+from config import NUM_ROWS, column_generators, cudf  # noqa: E402
+from utils import OrderedSet, collapse_fixtures, make_fixture
 
-import pytest
+fixtures = OrderedSet()
+for dtype, column_generator in column_generators.items():
+    for nr in NUM_ROWS:
 
-from common.config import cudf, cupy  # noqa: E402
+        def column_nulls_false(request, nr=nr):
+            return cudf.core.column.as_column(column_generator(nr))
 
+        make_fixture(
+            f"column_dtype_{dtype}_nulls_false_rows_{nr}",
+            column_nulls_false,
+            globals(),
+            fixtures,
+        )
 
-@pytest.fixture(params=itertools.product([100, 10000], [True, False]))
-def col(request):
-    """Create a cudf column.
+        def column_nulls_true(request, nr=nr):
+            c = cudf.core.column.as_column(column_generator(nr))
+            c[::2] = None
+            return c
 
-    The two parameters are `nrows` and `has_nulls`
-    """
-    nrows, has_nulls = request.param
-    rstate = cupy.random.RandomState(seed=0)
-    c = cudf.core.column.as_column(rstate.randn(nrows))
-    if has_nulls:
-        # The choice of null placement is arbitrary.
-        c[::2] = None
-    return c
+        make_fixture(
+            f"column_dtype_{dtype}_nulls_true_rows_{nr}",
+            column_nulls_true,
+            globals(),
+            fixtures,
+        )
+
+num_new_fixtures = len(fixtures)
+
+# Keep trying to merge existing fixtures until no new fixtures are added.
+while num_new_fixtures > 0:
+    num_fixtures = len(fixtures)
+
+    # Note: If we start also introducing unions across dtypes, most likely
+    # those will take the form `*int_and_float*` or similar since we won't want
+    # to union _all_ dtypes. In that case, the regexes will need to use
+    # suitable lookaheads etc to avoid infinite loops here.
+    for pat, repl in [
+        ("_nulls_(true|false)", ""),
+        (r"_rows_\d+", ""),
+    ]:
+
+        collapse_fixtures(fixtures, pat, repl, None, globals())
+
+    num_new_fixtures = len(fixtures) - num_fixtures

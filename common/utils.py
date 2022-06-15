@@ -102,6 +102,7 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
     cls = cls.lower()
 
     supported_classes = (
+        "column",
         "series",
         "index",
         "dataframe",
