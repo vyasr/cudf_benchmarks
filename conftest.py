@@ -30,13 +30,13 @@ which they are valid, e.g. `def bench_sort_values(frame_or_index)`.
 
 The generated fixtures are named according to the following convention:
 `classname_dtype_{dtype}[_nulls_{true|false}][[_cols_{num_cols}]_rows_{num_rows}]`
-where classname is one of the following: index, series, dataframe, indexedframe,
-frame, frame_or_index. Note that in the case of
-indexes, to match Series/DataFrame we simply set `classname=index` and rely on
-the `dtype_{dtype}` component to delineate which index class is actually in use.
+where classname is one of the following: index, series, dataframe,
+indexedframe, frame, frame_or_index. Note that in the case of indexes, to match
+Series/DataFrame we simply set `classname=index` and rely on the
+`dtype_{dtype}` component to delineate which index class is actually in use.
 
-In addition to the above fixtures, we also provide the following more specialized
-fixtures:
+In addition to the above fixtures, we also provide the following more
+specialized fixtures:
     - rangeindex: Since RangeIndex always holds int64 data we cannot conflate
       it with index_dtype_int64 (a true Int64Index), and it cannot hold nulls.
       As a result, it is provided as a separate fixture.
@@ -56,7 +56,12 @@ import pytest_cases
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
 from config import cudf  # noqa: W0611, E402, F401
-from utils import OrderedSet, collapse_fixtures, make_fixture  # noqa: E402
+from utils import (  # noqa: E402
+    OrderedSet,
+    collapse_fixtures,
+    column_generators,
+    make_fixture,
+)
 
 # Turn off isort until we upgrade to 5.8.0
 # https://github.com/pycqa/isort/issues/1594
@@ -65,7 +70,6 @@ from config import (  # noqa: W0611, E402, F401
     NUM_COLS,
     NUM_ROWS,
     collect_ignore,
-    column_generators,
     pytest_collection_modifyitems,
     pytest_sessionfinish,
     pytest_sessionstart,
@@ -161,16 +165,16 @@ for dtype, column_generator in column_generators.items():
 # We define some custom naming functions for use in the creation of fixture
 # unions to create more readable test function names that don't contain the
 # entire union, which quickly becomes intractably long.
-def l1_id(val):
+def unique_union_id(val):
     return val.alternative_name
 
 
-def default_id(val):
+def default_union_id(val):
     return f"alt{val.get_alternative_idx()}"
 
 
 # Label the first level differently from others since there's no redundancy.
-idfunc = l1_id
+idfunc = unique_union_id
 num_new_fixtures = len(fixtures)
 
 # Keep trying to merge existing fixtures until no new fixtures are added.
@@ -189,11 +193,11 @@ while num_new_fixtures > 0:
         (r"_cols_\d+", ""),
     ]:
 
-        collapse_fixtures(fixtures, pat, repl, idfunc, globals())
+        collapse_fixtures(fixtures, pat, repl, globals(), idfunc)
 
     num_new_fixtures = len(fixtures) - num_fixtures
     # All subsequent levels get the same (collapsed) labels.
-    idfunc = default_id
+    idfunc = default_union_id
 
 
 for dtype, column_generator in column_generators.items():

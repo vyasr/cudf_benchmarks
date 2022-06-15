@@ -1,5 +1,5 @@
-from config import NUM_ROWS, column_generators, cudf  # noqa: E402
-from utils import OrderedSet, collapse_fixtures, make_fixture
+from config import NUM_ROWS, cudf  # noqa: E402
+from utils import OrderedSet, collapse_fixtures, column_generators, make_fixture
 
 fixtures = OrderedSet()
 for dtype, column_generator in column_generators.items():
@@ -42,6 +42,6 @@ while num_new_fixtures > 0:
         (r"_rows_\d+", ""),
     ]:
 
-        collapse_fixtures(fixtures, pat, repl, None, globals())
+        collapse_fixtures(fixtures, pat, repl, globals())
 
     num_new_fixtures = len(fixtures) - num_fixtures

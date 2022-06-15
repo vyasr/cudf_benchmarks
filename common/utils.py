@@ -1,3 +1,5 @@
+"""Common utilities for fixture creation and benchmarking."""
+
 import inspect
 import re
 import textwrap
@@ -6,8 +8,7 @@ from itertools import groupby
 from numbers import Real
 
 import pytest_cases
-from config import NUM_COLS, NUM_ROWS, column_generators, cudf
-from config import cupy as cp
+from config import NUM_COLS, NUM_ROWS, cudf, cupy
 
 
 def make_gather_map(len_gather_map: Real, len_column: Real, how: str):
@@ -23,19 +24,19 @@ def make_gather_map(len_gather_map: Real, len_column: Real, how: str):
     len_gather_map = round(len_gather_map)
     len_column = round(len_column)
 
-    rstate = cp.random.RandomState(seed=0)
+    rstate = cupy.random.RandomState(seed=0)
     if how == "sequence":
-        return cudf.Series(cp.arange(0, len_gather_map))
+        return cudf.Series(cupy.arange(0, len_gather_map))
     elif how == "reverse":
         return cudf.Series(
-            cp.arange(len_column - 1, len_column - len_gather_map - 1, -1)
+            cupy.arange(len_column - 1, len_column - len_gather_map - 1, -1)
         )
     elif how == "random":
         return cudf.Series(rstate.randint(0, len_column, len_gather_map))
 
 
 def make_boolean_mask_column(size):
-    rstate = cp.random.RandomState(seed=0)
+    rstate = cupy.random.RandomState(seed=0)
     return cudf.core.column.as_column(rstate.randint(0, 2, size).astype(bool))
 
 
@@ -226,7 +227,7 @@ def make_fixture(name, func, globals_, fixtures):
     fixtures.add(name)
 
 
-def collapse_fixtures(fixtures, pattern, repl, idfunc, globals_):
+def collapse_fixtures(fixtures, pattern, repl, globals_, idfunc=None):
     """Create unions of fixtures based on specific name mappings.
 
     `fixtures` are grouped into unions according the regex replacement
@@ -245,3 +246,11 @@ def collapse_fixtures(fixtures, pattern, repl, idfunc, globals_):
             # Need to assign back to the parent scope's globals.
             globals_[name] = globals()[name]
             fixtures.add(name)
+
+
+# A dictionary of callables that create a column of a specified length
+random_state = cupy.random.RandomState(42)
+column_generators = {
+    "int": (lambda nr: random_state.randint(low=0, high=100, size=nr)),
+    "float": (lambda nr: random_state.rand(nr)),
+}

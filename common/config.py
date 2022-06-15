@@ -11,6 +11,12 @@ features:
     - Defining CUDF_BENCHMARKS_TEST_ONLY will set global configuration
       variables to avoid running large benchmarks, instead using minimal values
       to simply ensure that benchmarks are functional.
+
+This file is also where standard pytest hooks should be overridden. While these
+definitions typically belong in conftest.py, since any of the above environment
+variables could affect test collection or other properties, we must define them
+in this file and import them in conftest.py to ensure that they are handled
+appropriately.
 """
 import os
 import sys
@@ -34,7 +40,7 @@ if "CUDF_BENCHMARKS_USE_PANDAS" in os.environ:
 
 else:
     import cudf  # noqa: W0611, F401
-    import cupy
+    import cupy  # noqa: W0611, F401
 
     def pytest_collection_modifyitems(session, config, items):
         pass
@@ -58,10 +64,3 @@ if "CUDF_BENCHMARKS_TEST_ONLY" in os.environ:
 else:
     NUM_ROWS = [100, 10_000, 1_000_000]
     NUM_COLS = [1, 6]
-
-# A dictionary of callables that create a column of a specified length
-random_state = cupy.random.RandomState(42)
-column_generators = {
-    "int": (lambda nr: random_state.randint(low=0, high=100, size=nr)),
-    "float": (lambda nr: random_state.rand(nr)),
-}
