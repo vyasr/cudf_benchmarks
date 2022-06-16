@@ -95,11 +95,13 @@ for dtype, column_generator in column_generators.items():
 
     for nr in NUM_ROWS:
         # TODO: pytest_cases.fixture doesn't appear to support lambdas where
-        # pytest does.
-        # TODO: pytest_cases seems to have a bug where the first argument being
-        # a kwarg (nr=nr, nc=nc) raises errors. I'll need to track that
-        # upstream, for now I'm just passing the request fixture and not using
-        # it as a way to bypass the issue.
+        # pytest does. https://github.com/smarie/python-pytest-cases/issues/278
+        # Once that is fixed we could use lambdas here.
+        # TODO: pytest_cases has a bug where the first argument being a
+        # defaulted kwarg e.g. (nr=nr, nc=nc) raises errors.
+        # https://github.com/smarie/python-pytest-cases/issues/278
+        # Once that is fixed we could remove all the extraneous `request`
+        # fixtures in these fixtures.
         def series_nulls_false(request, nr=nr, column_generator=column_generator):
             return cudf.Series(column_generator(nr))
 
