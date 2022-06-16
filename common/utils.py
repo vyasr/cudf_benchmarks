@@ -161,13 +161,18 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
         params_str = ", ".join(f"{p}" for p in parameters if p != name)
         arg_str = ", ".join(f"{p}={p}" for p in parameters if p != name)
 
-        params_str += f", {fixture_name}"
-        arg_str += f", {name}={fixture_name}"
+        if params_str:
+            params_str += ", "
+        if arg_str:
+            arg_str += ", "
+
+        params_str += f"{fixture_name}"
+        arg_str += f"{name}={fixture_name}"
 
         src = textwrap.dedent(
             f"""
             def wrapped_bm({params_str}):
-                bm({arg_str})
+                return bm({arg_str})
             """
         )
         globals_ = {"bm": bm}
