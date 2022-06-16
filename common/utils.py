@@ -48,10 +48,12 @@ def flatten(xs):
             yield x
 
 
-def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=None):
-    """A convenience wrapper for using cudf's 'standard' fixtures.
+def accepts_cudf_fixture(
+    cls, *, dtype="int", nulls=None, cols=None, rows=None, name=None
+):
+    """Pass "standard" cudf fixtures to functions without renaming parameters.
 
-    The standard fixture generation logic provides a plethora of useful
+    The fixture generation logic in conftest.py provides a plethora of useful
     fixtures to allow developers to easily select an appropriate cross-section
     of the space of objects to apply a particular benchmark to. However, the
     usage of this fixtures is cumbersome because creating them in a principled
@@ -94,7 +96,7 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
     --------
     # Note: As an internal function, this example is not meant for doctesting.
 
-    @cudf_benchmark("dataframe", dtype="int", nulls=False, name="df")
+    @accepts_cudf_fixture("dataframe", dtype="int", nulls=False, name="df")
     def bench_columns(benchmark, df):
         benchmark(df.columns)
     """
@@ -152,7 +154,7 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
         # decorator is to define a new benchmark function with a signature
         # identical to that of the decorated benchmark except with the user's
         # fixture name replaced by the true fixture name based on the arguments
-        # to cudf_benchmark.
+        # to accepts_cudf_fixture.
         parameters = inspect.signature(bm).parameters
 
         # Note: This logic assumes that any benchmark using this fixture has at

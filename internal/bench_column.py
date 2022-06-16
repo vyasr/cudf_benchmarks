@@ -1,26 +1,26 @@
 import pytest
 import pytest_cases
-from utils import cudf_benchmark, make_boolean_mask_column, make_gather_map
+from utils import accepts_cudf_fixture, make_boolean_mask_column, make_gather_map
 
 
-@cudf_benchmark(cls="column", dtype="float")
+@accepts_cudf_fixture(cls="column", dtype="float")
 def bench_apply_boolean_mask(benchmark, column):
     mask = make_boolean_mask_column(column.size)
     benchmark(column.apply_boolean_mask, mask)
 
 
-@cudf_benchmark(cls="column", dtype="float")
+@accepts_cudf_fixture(cls="column", dtype="float")
 @pytest.mark.parametrize("dropnan", [True, False])
 def bench_dropna(benchmark, column, dropnan):
     benchmark(column.dropna, drop_nan=dropnan)
 
 
-@cudf_benchmark(cls="column", dtype="float")
+@accepts_cudf_fixture(cls="column", dtype="float")
 def bench_unique_single_column(benchmark, column):
     benchmark(column.unique)
 
 
-@cudf_benchmark(cls="column", dtype="float")
+@accepts_cudf_fixture(cls="column", dtype="float")
 @pytest.mark.parametrize("nullify", [True, False])
 @pytest.mark.parametrize("gather_how", ["sequence", "reverse", "random"])
 def bench_take(benchmark, column, gather_how, nullify):
@@ -29,7 +29,7 @@ def bench_take(benchmark, column, gather_how, nullify):
 
 
 # TODO: Due to https://github.com/smarie/python-pytest-cases/issues/280 we
-# cannot use the cudf_benchmark decorator for cases. If and when that is
+# cannot use the accepts_cudf_fixture decorator for cases. If and when that is
 # resolved, we can change all of the cases below to use that instead of
 # hardcoding the fixture name.
 def setitem_case_stride_1_slice_scalar(column_dtype_int_nulls_false):
