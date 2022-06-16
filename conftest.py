@@ -30,13 +30,13 @@ which they are valid, e.g. `def bench_sort_values(frame_or_index)`.
 
 The generated fixtures are named according to the following convention:
 `classname_dtype_{dtype}[_nulls_{true|false}][[_cols_{num_cols}]_rows_{num_rows}]`
-where classname is one of the following: index, series, dataframe, indexedframe,
-frame, frame_or_index. Note that in the case of
-indexes, to match Series/DataFrame we simply set `classname=index` and rely on
-the `dtype_{dtype}` component to delineate which index class is actually in use.
+where classname is one of the following: index, series, dataframe,
+indexedframe, frame, frame_or_index. Note that in the case of indexes, to match
+Series/DataFrame we simply set `classname=index` and rely on the
+`dtype_{dtype}` component to delineate which index class is actually in use.
 
-In addition to the above fixtures, we also provide the following more specialized
-fixtures:
+In addition to the above fixtures, we also provide the following more
+specialized fixtures:
     - rangeindex: Since RangeIndex always holds int64 data we cannot conflate
       it with index_dtype_int64 (a true Int64Index), and it cannot hold nulls.
       As a result, it is provided as a separate fixture.
@@ -44,11 +44,8 @@ fixtures:
 
 
 import os
-import re
 import string
 import sys
-from collections.abc import MutableSet
-from itertools import groupby
 
 import pytest_cases
 
@@ -59,6 +56,12 @@ import pytest_cases
 sys.path.insert(0, os.path.join(os.getcwd(), "common"))
 
 from config import cudf  # noqa: W0611, E402, F401
+from utils import (  # noqa: E402
+    OrderedSet,
+    collapse_fixtures,
+    column_generators,
+    make_fixture,
+)
 
 # Turn off isort until we upgrade to 5.8.0
 # https://github.com/pycqa/isort/issues/1594
@@ -67,7 +70,6 @@ from config import (  # noqa: W0611, E402, F401
     NUM_COLS,
     NUM_ROWS,
     collect_ignore,
-    column_generators,
     pytest_collection_modifyitems,
     pytest_sessionfinish,
     pytest_sessionstart,
@@ -79,71 +81,6 @@ from config import (  # noqa: W0611, E402, F401
 @pytest_cases.fixture(params=[0, 1], ids=["AxisIndex", "AxisColumn"])
 def axis(request):
     return request.param
-
-
-def collapse_fixtures(fixtures, pattern, repl, new_fixtures, idfunc):
-    """Create unions of fixtures based on specific name mappings.
-
-    `fixtures` are grouped into unions according the regex replacement
-    `re.sub(pattern, repl)` and placed into `new_fixtures`.
-    """
-
-    def collapser(n):
-        return re.sub(pattern, repl, n)
-
-    for name, group in groupby(sorted(fixtures, key=collapser), key=collapser):
-        group = list(group)
-        if len(group) > 1:
-            if name not in fixtures | new_fixtures:
-                pytest_cases.fixture_union(name=name, fixtures=group, ids=idfunc)
-                new_fixtures.add(name)
-
-
-class OrderedSet(MutableSet):
-    """A minimal OrderedSet implementation built on a dict.
-
-    This implementation exploits the fact that dicts are ordered as of Python
-    3.7. It is not intended to be performant, so only the minimal set of
-    methods are implemented. We need this class to ensure that fixture names
-    are constructed deterministically, otherwise pytest-xdist will complain if
-    different threads have seemingly different tests.
-    """
-
-    def __init__(self, args=None):
-        args = args or []
-        self._data = {value: None for value in args}
-
-    def __contains__(self, key):
-        return key in self._data
-
-    def __iter__(self):
-        return iter(self._data)
-
-    def __len__(self):
-        return len(self._data)
-
-    def __repr__(self):
-        # Helpful for debugging.
-        data = ", ".join(str(i) for i in self._data)
-        return f"{self.__class__.__name__}({data})"
-
-    def add(self, value):
-        self._data[value] = None
-
-    def discard(self, value):
-        self._data.pop(value, None)
-
-
-def make_fixture(name, func):
-    """Create a named fixture and inject it into the global namespace.
-
-    https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
-    explains why this hack is necessary. Essentially, dynamically generated
-    fixtures must exist in globals() to be found by pytest.
-    """
-    globals()[name] = pytest_cases.fixture(name=name)(func)
-    global fixtures
-    fixtures.add(name)
 
 
 # First generate all the base fixtures.
@@ -158,28 +95,45 @@ for dtype, column_generator in column_generators.items():
 
     for nr in NUM_ROWS:
         # TODO: pytest_cases.fixture doesn't appear to support lambdas where
-        # pytest does.
-        # TODO: pytest_cases seems to have a bug where the first argument being
-        # a kwarg (nr=nr, nc=nc) raises errors. I'll need to track that
-        # upstream, for now I'm just passing the request fixture and not using
-        # it as a way to bypass the issue.
+        # pytest does. https://github.com/smarie/python-pytest-cases/issues/278
+        # Once that is fixed we could use lambdas here.
+        # TODO: pytest_cases has a bug where the first argument being a
+        # defaulted kwarg e.g. (nr=nr, nc=nc) raises errors.
+        # https://github.com/smarie/python-pytest-cases/issues/278
+        # Once that is fixed we could remove all the extraneous `request`
+        # fixtures in these fixtures.
         def series_nulls_false(request, nr=nr, column_generator=column_generator):
             return cudf.Series(column_generator(nr))
 
-        make_fixture(f"series_dtype_{dtype}_nulls_false_rows_{nr}", series_nulls_false)
+        make_fixture(
+            f"series_dtype_{dtype}_nulls_false_rows_{nr}",
+            series_nulls_false,
+            globals(),
+            fixtures,
+        )
 
         def series_nulls_true(request, nr=nr, column_generator=column_generator):
             s = cudf.Series(column_generator(nr))
             s.iloc[::2] = None
             return s
 
-        make_fixture(f"series_dtype_{dtype}_nulls_true_rows_{nr}", series_nulls_true)
+        make_fixture(
+            f"series_dtype_{dtype}_nulls_true_rows_{nr}",
+            series_nulls_true,
+            globals(),
+            fixtures,
+        )
 
         # For now, not bothering to include a nullable index fixture.
         def index_nulls_false(request, nr=nr, column_generator=column_generator):
             return cudf.Index(column_generator(nr))
 
-        make_fixture(f"index_dtype_{dtype}_nulls_false_rows_{nr}", index_nulls_false)
+        make_fixture(
+            f"index_dtype_{dtype}_nulls_false_rows_{nr}",
+            index_nulls_false,
+            globals(),
+            fixtures,
+        )
 
         for nc in NUM_COLS:
 
@@ -191,6 +145,8 @@ for dtype, column_generator in column_generators.items():
             make_fixture(
                 f"dataframe_dtype_{dtype}_nulls_false_cols_{nc}_rows_{nr}",
                 dataframe_nulls_false,
+                globals(),
+                fixtures,
             )
 
             def dataframe_nulls_true(
@@ -203,29 +159,29 @@ for dtype, column_generator in column_generators.items():
             make_fixture(
                 f"dataframe_dtype_{dtype}_nulls_true_cols_{nc}_rows_{nr}",
                 dataframe_nulls_true,
+                globals(),
+                fixtures,
             )
 
 
 # We define some custom naming functions for use in the creation of fixture
 # unions to create more readable test function names that don't contain the
 # entire union, which quickly becomes intractably long.
-def l1_id(val):
+def unique_union_id(val):
     return val.alternative_name
 
 
-def default_id(val):
+def default_union_id(val):
     return f"alt{val.get_alternative_idx()}"
 
 
 # Label the first level differently from others since there's no redundancy.
-idfunc = l1_id
-# This is a temporary assignment to effect a do-while loop below. new_fixtures
-# really starts off empty.
-new_fixtures = fixtures
+idfunc = unique_union_id
+num_new_fixtures = len(fixtures)
 
 # Keep trying to merge existing fixtures until no new fixtures are added.
-while new_fixtures:
-    new_fixtures = OrderedSet()
+while num_new_fixtures > 0:
+    num_fixtures = len(fixtures)
 
     # Note: If we start also introducing unions across dtypes, most likely
     # those will take the form `*int_and_float*` or similar since we won't want
@@ -239,10 +195,11 @@ while new_fixtures:
         (r"_cols_\d+", ""),
     ]:
 
-        collapse_fixtures(fixtures, pat, repl, new_fixtures, idfunc)
+        collapse_fixtures(fixtures, pat, repl, globals(), idfunc)
 
-    fixtures |= new_fixtures
-    idfunc = default_id
+    num_new_fixtures = len(fixtures) - num_fixtures
+    # All subsequent levels get the same (collapsed) labels.
+    idfunc = default_union_id
 
 
 for dtype, column_generator in column_generators.items():

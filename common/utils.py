@@ -1,9 +1,14 @@
+"""Common utilities for fixture creation and benchmarking."""
+
 import inspect
+import re
 import textwrap
+from collections.abc import MutableSet
+from itertools import groupby
 from numbers import Real
 
-from config import NUM_COLS, NUM_ROWS, column_generators, cudf
-from config import cupy as cp
+import pytest_cases
+from config import NUM_COLS, NUM_ROWS, cudf, cupy
 
 
 def make_gather_map(len_gather_map: Real, len_column: Real, how: str):
@@ -19,19 +24,19 @@ def make_gather_map(len_gather_map: Real, len_column: Real, how: str):
     len_gather_map = round(len_gather_map)
     len_column = round(len_column)
 
-    rstate = cp.random.RandomState(seed=0)
+    rstate = cupy.random.RandomState(seed=0)
     if how == "sequence":
-        return cudf.Series(cp.arange(0, len_gather_map))
+        return cudf.Series(cupy.arange(0, len_gather_map))
     elif how == "reverse":
         return cudf.Series(
-            cp.arange(len_column - 1, len_column - len_gather_map - 1, -1)
+            cupy.arange(len_column - 1, len_column - len_gather_map - 1, -1)
         )
     elif how == "random":
         return cudf.Series(rstate.randint(0, len_column, len_gather_map))
 
 
 def make_boolean_mask_column(size):
-    rstate = cp.random.RandomState(seed=0)
+    rstate = cupy.random.RandomState(seed=0)
     return cudf.core.column.as_column(rstate.randint(0, 2, size).astype(bool))
 
 
@@ -43,10 +48,12 @@ def flatten(xs):
             yield x
 
 
-def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=None):
-    """A convenience wrapper for using cudf's 'standard' fixtures.
+def accepts_cudf_fixture(
+    cls, *, dtype="int", nulls=None, cols=None, rows=None, name=None
+):
+    """Pass "standard" cudf fixtures to functions without renaming parameters.
 
-    The standard fixture generation logic provides a plethora of useful
+    The fixture generation logic in conftest.py provides a plethora of useful
     fixtures to allow developers to easily select an appropriate cross-section
     of the space of objects to apply a particular benchmark to. However, the
     usage of this fixtures is cumbersome because creating them in a principled
@@ -89,7 +96,7 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
     --------
     # Note: As an internal function, this example is not meant for doctesting.
 
-    @cudf_benchmark("dataframe", dtype="int", nulls=False, name="df")
+    @accepts_cudf_fixture("dataframe", dtype="int", nulls=False, name="df")
     def bench_columns(benchmark, df):
         benchmark(df.columns)
     """
@@ -98,6 +105,7 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
     cls = cls.lower()
 
     supported_classes = (
+        "column",
         "series",
         "index",
         "dataframe",
@@ -146,7 +154,7 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
         # decorator is to define a new benchmark function with a signature
         # identical to that of the decorated benchmark except with the user's
         # fixture name replaced by the true fixture name based on the arguments
-        # to cudf_benchmark.
+        # to accepts_cudf_fixture.
         parameters = inspect.signature(bm).parameters
 
         # Note: This logic assumes that any benchmark using this fixture has at
@@ -155,13 +163,18 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
         params_str = ", ".join(f"{p}" for p in parameters if p != name)
         arg_str = ", ".join(f"{p}={p}" for p in parameters if p != name)
 
-        params_str += f", {fixture_name}"
-        arg_str += f", {name}={fixture_name}"
+        if params_str:
+            params_str += ", "
+        if arg_str:
+            arg_str += ", "
+
+        params_str += f"{fixture_name}"
+        arg_str += f"{name}={fixture_name}"
 
         src = textwrap.dedent(
             f"""
             def wrapped_bm({params_str}):
-                bm({arg_str})
+                return bm({arg_str})
             """
         )
         globals_ = {"bm": bm}
@@ -173,3 +186,78 @@ def cudf_benchmark(cls, *, dtype="int", nulls=None, cols=None, rows=None, name=N
         return wrapped_bm
 
     return deco
+
+
+class OrderedSet(MutableSet):
+    """A minimal OrderedSet implementation built on a dict.
+
+    This implementation exploits the fact that dicts are ordered as of Python
+    3.7. It is not intended to be performant, so only the minimal set of
+    methods are implemented. We need this class to ensure that fixture names
+    are constructed deterministically, otherwise pytest-xdist will complain if
+    different threads have seemingly different tests.
+    """
+
+    def __init__(self, args=None):
+        args = args or []
+        self._data = {value: None for value in args}
+
+    def __contains__(self, key):
+        return key in self._data
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+    def __repr__(self):
+        # Helpful for debugging.
+        data = ", ".join(str(i) for i in self._data)
+        return f"{self.__class__.__name__}({data})"
+
+    def add(self, value):
+        self._data[value] = None
+
+    def discard(self, value):
+        self._data.pop(value, None)
+
+
+def make_fixture(name, func, globals_, fixtures):
+    """Create a named fixture in `globals_` and save its name in `fixtures`.
+
+    https://github.com/pytest-dev/pytest/issues/2424#issuecomment-333387206
+    explains why this hack is necessary. Essentially, dynamically generated
+    fixtures must exist in globals() to be found by pytest.
+    """
+    globals_[name] = pytest_cases.fixture(name=name)(func)
+    fixtures.add(name)
+
+
+def collapse_fixtures(fixtures, pattern, repl, globals_, idfunc=None):
+    """Create unions of fixtures based on specific name mappings.
+
+    `fixtures` are grouped into unions according the regex replacement
+    `re.sub(pattern, repl)` and placed into `new_fixtures`.
+    """
+
+    def collapser(n):
+        return re.sub(pattern, repl, n)
+
+    # Note: sorted creates a new list, not a view, so it's OK to modify the
+    # list of fixtures while iterating over the sorted result.
+    for name, group in groupby(sorted(fixtures, key=collapser), key=collapser):
+        group = list(group)
+        if len(group) > 1 and name not in fixtures:
+            pytest_cases.fixture_union(name=name, fixtures=group, ids=idfunc)
+            # Need to assign back to the parent scope's globals.
+            globals_[name] = globals()[name]
+            fixtures.add(name)
+
+
+# A dictionary of callables that create a column of a specified length
+random_state = cupy.random.RandomState(42)
+column_generators = {
+    "int": (lambda nr: random_state.randint(low=0, high=100, size=nr)),
+    "float": (lambda nr: random_state.rand(nr)),
+}

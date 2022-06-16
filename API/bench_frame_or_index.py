@@ -4,10 +4,10 @@ import operator
 
 import numpy as np
 import pytest
-from utils import cudf_benchmark, make_gather_map
+from utils import accepts_cudf_fixture, make_gather_map
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int")
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int")
 @pytest.mark.parametrize("gather_how", ["sequence", "reverse", "random"])
 @pytest.mark.parametrize("fraction", [0.4])
 def bench_take(benchmark, gather_how, fraction, frame_or_index):
@@ -17,62 +17,62 @@ def bench_take(benchmark, gather_how, fraction, frame_or_index):
 
 
 @pytest.mark.pandas_incompatible  # Series/Index work, but not DataFrame
-@cudf_benchmark(cls="frame_or_index", dtype="int")
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int")
 def bench_argsort(benchmark, frame_or_index):
     benchmark(frame_or_index.argsort)
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int")
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int")
 def bench_min(benchmark, frame_or_index):
     benchmark(frame_or_index.min)
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int")
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int")
 def bench_where(benchmark, frame_or_index):
     cond = frame_or_index % 2 == 0
     benchmark(frame_or_index.where, cond, 0)
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int", nulls=False)
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int", nulls=False)
 @pytest.mark.pandas_incompatible
 def bench_values_host(benchmark, frame_or_index):
     benchmark(lambda: frame_or_index.values_host)
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int", nulls=False)
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int", nulls=False)
 def bench_values(benchmark, frame_or_index):
     benchmark(lambda: frame_or_index.values)
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int")
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int")
 def bench_nunique(benchmark, frame_or_index):
     benchmark(frame_or_index.nunique)
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int", nulls=False)
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int", nulls=False)
 def bench_to_numpy(benchmark, frame_or_index):
     benchmark(frame_or_index.to_numpy)
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int", nulls=False)
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int", nulls=False)
 @pytest.mark.pandas_incompatible
 def bench_to_cupy(benchmark, frame_or_index):
     benchmark(frame_or_index.to_cupy)
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int")
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int")
 @pytest.mark.pandas_incompatible
 def bench_to_arrow(benchmark, frame_or_index):
     benchmark(frame_or_index.to_arrow)
 
 
-@cudf_benchmark(cls="frame_or_index", dtype="int")
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int")
 def bench_astype(benchmark, frame_or_index):
     benchmark(frame_or_index.astype, float)
 
 
 @pytest.mark.parametrize("ufunc", [np.add, np.logical_and])
-@cudf_benchmark(cls="frame_or_index", dtype="int")
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int")
 def bench_ufunc_series_binary(benchmark, frame_or_index, ufunc):
     benchmark(ufunc, frame_or_index, frame_or_index)
 
@@ -81,6 +81,6 @@ def bench_ufunc_series_binary(benchmark, frame_or_index, ufunc):
     "op",
     [operator.add, operator.mul, operator.eq],
 )
-@cudf_benchmark(cls="frame_or_index", dtype="int")
+@accepts_cudf_fixture(cls="frame_or_index", dtype="int")
 def bench_binops(benchmark, op, frame_or_index):
     benchmark(lambda: op(frame_or_index, frame_or_index))
