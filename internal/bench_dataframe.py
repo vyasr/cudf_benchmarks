@@ -1,6 +1,7 @@
-from utils import make_boolean_mask_column
+from utils import cudf_benchmark, make_boolean_mask_column
 
 
-def bench_df_apply_boolean_mask(benchmark, dataframe_dtype_int):
-    mask = make_boolean_mask_column(len(dataframe_dtype_int))
-    benchmark(dataframe_dtype_int._apply_boolean_mask, mask)
+@cudf_benchmark(cls="dataframe", dtype="int")
+def bench_apply_boolean_mask(benchmark, dataframe):
+    mask = make_boolean_mask_column(len(dataframe))
+    benchmark(dataframe._apply_boolean_mask, mask)
